@@ -1,0 +1,39 @@
+[package]
+name = "hecate-vault"
+version = "0.1.0"
+edition = "2024"
+authors = ["Luciano <luciano@localhost>"]
+description = "A local-first, TPM-backed encrypted secrets vault CLI in Rust."
+readme = "README.md"
+
+[[bin]]
+name = "hecate"
+path = "src/main.rs"
+
+[dependencies]
+# CLI & Terminal UX
+clap = { version = "4.5", features = ["derive", "env"] }
+colored = "2.1"
+
+# Cryptography & Security
+argon2 = "0.5"
+aes-gcm = "0.10"
+zeroize = { version = "1.8", features = ["zeroize_derive", "alloc", "serde"] }
+rand = "0.8"
+sha2 = "0.10"
+
+# Serialization & Storage
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.10"
+fd-lock = "4.0"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+
+# OS & Keyring Binding
+keyring = "3.2"
+
+# Error Handling & Utilities
+anyhow = "1.0"
+thiserror = "1.0"
+
