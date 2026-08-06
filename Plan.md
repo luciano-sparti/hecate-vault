@@ -95,8 +95,18 @@
 
 ---
 
+## Environment & Tooling Notes
+> [!NOTE]
+> - Development & build commands (`cargo build`, `cargo test`, `cargo check`) are executed via **WSL** (`wsl cargo ...`), where Rust and Cargo are installed.
+
 ## Next Actions
 1. Initialize Rust Cargo workspace: `cargo init --bin .`
 2. Add core dependencies (`clap`, `serde`, `argon2`, `aes-gcm`, `zeroize`, `tokio`/`anyhow`).
 
-
+## Design Improvement Notes
+- **Envelope Hierarchy**: Implement true envelope encryption where a Master Key (MK) wraps a Data Encryption Key (DEK); each secret is encrypted with the DEK. Enables fast Master Key rotation without re‑encrypting all secrets.
+- **Base64 Serialization**: Store salts, nonces, and ciphertexts as raw bytes in memory; serialize to Base64 only for JSON persistence using `serde_bytes` or custom helpers.
+- **Interactive Secret Input**: For `hecate set`, prompt for secret value securely (masked input) when `--value` is omitted to avoid leaking secrets via shell history or process listings.
+- **Sidecar Lock File**: Use a dedicated lock file (`~/.hecate/vault.lock`) for concurrency control, decoupling file locking from atomic write replacement to avoid Windows file‑handle issues.
+- **Root‑of‑Trust Detection**: Ensure `detect_root_trust` checks TPM / OS keyring without leaving test entries and handles headless WSL environments gracefully.
+- **Audit & Crypto Coverage**: Plan to integrate `AuditEntry` usage and expose AEAD utilities via the vault API in later phases.
