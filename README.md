@@ -44,7 +44,7 @@
 
 <br/>
 
-[Overview](#-overview) • [Why Hecate Vault](#-why-hecate-vault) • [Soft-HSM vs Physical HSM](#-software-hsm-vs-physical-hardware-hsm-an-objective-assessment) • [Architecture](#-technical-architecture) • [Features](#-key-features) • [Interactive TUI](#-interactive-terminal-ui) • [Quick Start](#-quick-start--demo) • [CLI Reference](#-cli-command-reference) • [Threat Model](#-threat-model--security-boundary)
+[Overview](#-overview) • [Why Hecate Vault](#-why-hecate-vault) • [Architecture](#-technical-architecture) • [Features](#-key-features) • [Interactive TUI](#-interactive-terminal-ui) • [Quick Start](#-quick-start--demo) • [CLI Reference](#-cli-command-reference) • [Threat Model](#-threat-model--security-boundary) • [Soft-HSM vs Physical HSM](#-software-hsm-vs-physical-hardware-hsm-an-objective-assessment)
 
 </div>
 
@@ -58,38 +58,6 @@ Built from the ground up in Rust (2024 Edition), Hecate Vault enforces a strict 
 
 1. **`hecate-core` (Software HSM & Management Plane)**: An isolated cryptographic authority managing Master Keys (MK), Key Encryption Keys (KEK), dynamic policy distribution, internal X.509 PKI, Shamir $(k, n)$ disaster recovery custody, and a tamper-evident SHA-256 hash-chained audit ledger.
 2. **`hecate-agent` (Endpoint Enforcement Daemon)**: A lightweight client daemon running on protected nodes that establishes mutual TLS (mTLS), synchronizes policies verified via asymmetric **Ed25519** signatures, and enforces transparent file-level envelope encryption with strict process access controls (`deny_root_unauthorized`, UID/GID matching, and binary digest validation).
-
----
-
-## ⚖️ Software HSM vs. Physical Hardware HSM: An Objective Assessment
-
-A fundamental question when evaluating Hecate Vault: **Does a software system actually act like a Hardware Security Module (HSM)?**
-
-In cryptographic engineering and compliance frameworks (such as **FIPS 140-2/3** and **NIST SP 800-57**), Hecate Vault is formally classified as a **Software Cryptographic Module (FIPS 140 Level 1)** or a **Key Management Server (KMS) with a Soft-HSM Engine** — analogous to OpenDNSSEC’s `SoftHSMv2` or HashiCorp Vault’s Transit engine.
-
-### 1. Where Hecate Vault Objectively Acts Like an HSM
-
-| HSM Requirement | How Hecate Vault Implements It | Objective Verdict |
-| :--- | :--- | :--- |
-| **Opaque Key Handles & Non-Exportability** | Clients and agents never receive raw Key Encryption Keys (KEKs). They pass opaque key IDs (`key-c2d08db...`) to the Core, and cryptographic operations (`wrap_key`, `unwrap_key`, `encrypt`, `rotate`) execute **strictly inside the `SoftwareHsm` memory boundary**. | **Identical to HSM API** (PKCS#11 / KMIP model) |
-| **3-Tier Envelope Encryption** | Implements the standard Master Key (MK) $\to$ Key Encryption Key (KEK) $\to$ Data Encryption Key (DEK) hierarchy specified in NIST SP 800-38F. | **Identical to HSM Key Lifecycle** |
-| **M-of-N Multi-Party Custody** | Master Key is split using Shamir Secret Sharing over $GF(2^8)$ with primitive polynomial `0x11D`. No single administrator can unseal or restore a bare-metal Core without a $k$-of-$n$ quorum (e.g. 3 of 5 custodians). | **Identical to HSM Smartcard/PED Quorums** (e.g., Thales Luna M-of-N) |
-| **Memory Pinning & Instant Zeroization** | Uses POSIX `mlock` to prevent keys from ever hitting swap partitions, and `zeroize::ZeroizeOnDrop` to scrub volatile RAM upon destruction or panic. | **Industry Best-Practice for Soft-HSM** |
-| **Tamper-Evident Auditability** | All key operations and policy mutations are recorded in a SHA-256 hash-chained immutable ledger. | **Equivalent to HSM Audit Logs** |
-
-### 2. Where Software Inherently Diverges from Physical Hardware
-
-| Threat Vector | True Hardware HSM (FIPS 140-2 Level 3/4) | Software HSM (Hecate Vault / SoftHSM) |
-| :--- | :--- | :--- |
-| **Host `root` / Kernel Compromise** | **Immune**: The HSM is a physically segregated board (PCIe/USB/Network). A compromised host `root` cannot read HSM internal RAM. | **Vulnerable**: A root attacker with kernel capabilities on the Core host (e.g. `/dev/mem`, custom kernel module, or `gdb`/`ptrace`) can theoretically inspect process memory while unlocked. |
-| **Physical Tampering & Probe Attacks** | **Immune**: Encased in resin with active tamper meshes; zeroizes key material instantly upon chassis breach, temperature drop, or voltage anomaly. | **Non-Existent**: A software binary running on general-purpose servers has no physical tamper detection. |
-| **Side-Channel & Cold Boot Attacks** | **Hardened**: Dedicated cryptographic ASIC resistant to Differential Power Analysis (DPA) and bus sniffing. | **Vulnerable to CPU Bugs**: Susceptible to microarchitectural side-channels (Spectre, Meltdown, cache timing) unless running inside hardware enclaves. |
-
-### 3. How to Bridge the Gap in Production
-
-To achieve near-hardware equivalence in cloud and bare-metal environments:
-1. Run `hecate-core` inside a **Confidential VM / Hardware Enclave** (such as AWS Nitro Enclaves, Intel SGX, or AMD SEV-SNP) to protect memory from host hypervisors and root users.
-2. Bind the Master Key encryption passphrase directly to a physical motherboard **TPM 2.0 PCR seal**.
 
 ---
 
@@ -336,6 +304,38 @@ Hecate Vault provides robust defense-in-depth cryptographic security with explic
 | **Audit Log Forgery** | Tamper-evident SHA-256 hash chaining; historical logs cannot be mutated without breaking chain proof. | **High (Immutable proof)** |
 | **Unauthorized Root Process** | Agent verifies UID/GID and binary hash (`/proc/<pid>/exe`); rejects unauthorized root access (`deny_root_unauthorized`). | **Defense-in-depth (User-space boundary)** |
 | **Kernel / Ring 0 Compromise** | *Note*: An attacker with root kernel capabilities (e.g. `/dev/mem` or custom kernel modules) can bypass user-space controls. | **Scope Limitation (Requires eBPF LSM / TEE for kernel-level boundary)** |
+
+---
+
+## ⚖️ Software HSM vs. Physical Hardware HSM: An Objective Assessment
+
+A fundamental question when evaluating Hecate Vault: **Does a software system actually act like a Hardware Security Module (HSM)?**
+
+In cryptographic engineering and compliance frameworks (such as **FIPS 140-2/3** and **NIST SP 800-57**), Hecate Vault is formally classified as a **Software Cryptographic Module (FIPS 140 Level 1)** or a **Key Management Server (KMS) with a Soft-HSM Engine** — analogous to OpenDNSSEC’s `SoftHSMv2` or HashiCorp Vault’s Transit engine.
+
+### 1. Where Hecate Vault Objectively Acts Like an HSM
+
+| HSM Requirement | How Hecate Vault Implements It | Objective Verdict |
+| :--- | :--- | :--- |
+| **Opaque Key Handles & Non-Exportability** | Clients and agents never receive raw Key Encryption Keys (KEKs). They pass opaque key IDs (`key-c2d08db...`) to the Core, and cryptographic operations (`wrap_key`, `unwrap_key`, `encrypt`, `rotate`) execute **strictly inside the `SoftwareHsm` memory boundary**. | **Identical to HSM API** (PKCS#11 / KMIP model) |
+| **3-Tier Envelope Encryption** | Implements the standard Master Key (MK) $\to$ Key Encryption Key (KEK) $\to$ Data Encryption Key (DEK) hierarchy specified in NIST SP 800-38F. | **Identical to HSM Key Lifecycle** |
+| **M-of-N Multi-Party Custody** | Master Key is split using Shamir Secret Sharing over $GF(2^8)$ with primitive polynomial `0x11D`. No single administrator can unseal or restore a bare-metal Core without a $k$-of-$n$ quorum (e.g. 3 of 5 custodians). | **Identical to HSM Smartcard/PED Quorums** (e.g., Thales Luna M-of-N) |
+| **Memory Pinning & Instant Zeroization** | Uses POSIX `mlock` to prevent keys from ever hitting swap partitions, and `zeroize::ZeroizeOnDrop` to scrub volatile RAM upon destruction or panic. | **Industry Best-Practice for Soft-HSM** |
+| **Tamper-Evident Auditability** | All key operations and policy mutations are recorded in a SHA-256 hash-chained immutable ledger. | **Equivalent to HSM Audit Logs** |
+
+### 2. Where Software Inherently Diverges from Physical Hardware
+
+| Threat Vector | True Hardware HSM (FIPS 140-2 Level 3/4) | Software HSM (Hecate Vault / SoftHSM) |
+| :--- | :--- | :--- |
+| **Host `root` / Kernel Compromise** | **Immune**: The HSM is a physically segregated board (PCIe/USB/Network). A compromised host `root` cannot read HSM internal RAM. | **Vulnerable**: A root attacker with kernel capabilities on the Core host (e.g. `/dev/mem`, custom kernel module, or `gdb`/`ptrace`) can theoretically inspect process memory while unlocked. |
+| **Physical Tampering & Probe Attacks** | **Immune**: Encased in resin with active tamper meshes; zeroizes key material instantly upon chassis breach, temperature drop, or voltage anomaly. | **Non-Existent**: A software binary running on general-purpose servers has no physical tamper detection. |
+| **Side-Channel & Cold Boot Attacks** | **Hardened**: Dedicated cryptographic ASIC resistant to Differential Power Analysis (DPA) and bus sniffing. | **Vulnerable to CPU Bugs**: Susceptible to microarchitectural side-channels (Spectre, Meltdown, cache timing) unless running inside hardware enclaves. |
+
+### 3. How to Bridge the Gap in Production
+
+To achieve near-hardware equivalence in cloud and bare-metal environments:
+1. Run `hecate-core` inside a **Confidential VM / Hardware Enclave** (such as AWS Nitro Enclaves, Intel SGX, or AMD SEV-SNP) to protect memory from host hypervisors and root users.
+2. Bind the Master Key encryption passphrase directly to a physical motherboard **TPM 2.0 PCR seal**.
 
 ---
 
