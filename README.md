@@ -154,8 +154,14 @@ flowchart TD
 Hecate Vault includes a modern, high-performance Terminal User Interface built with **Ratatui 0.29** and **Crossterm**:
 
 ```bash
-# Launch interactive TUI against default or custom data directory
-cargo run --bin hecate-tui -- --data-dir /tmp/hecate_demo_sandbox/core_data
+# Launch interactive TUI
+hecate-tui
+
+# Or launch via hecate-core subcommand
+hecate-core tui
+
+# Point to custom data directory
+hecate-tui --data-dir ~/.hecate
 ```
 
 ### TUI Capabilities & Shortcuts
@@ -208,24 +214,27 @@ chmod +x ./demo.sh
 
 ### 3. Manual CLI Walkthrough
 
+> [!TIP]
+> If developing directly from git source without installing binaries, you can prefix commands with `cargo run --bin <crate> -- ...`.
+
 #### Step A: Initialize Core HSM
 ```bash
 # Initialize Core with 3-of-5 Shamir Master Key shares
-cargo run --bin hecate-core -- init --shares 5 --threshold 3 --passphrase "admin_master_pass"
+hecate-core init --shares 5 --threshold 3 --passphrase "admin_master_pass"
 ```
 
 #### Step B: Create and Rotate KEKs
 ```bash
 # Generate a primary KEK
-cargo run --bin hecate-core -- key create --alias prod-db-kek --key-type aes256gcm
+hecate-core key create --alias prod-db-kek --key-type aes256gcm
 
 # Rotate KEK to Version 2
-cargo run --bin hecate-core -- key rotate --id <KEY_ID>
+hecate-core key rotate --id <KEY_ID>
 ```
 
 #### Step C: Configure Guard Point Policy
 ```bash
-cargo run --bin hecate-core -- policy add \
+hecate-core policy add \
   --id gp-prod-db \
   --name "Production Database Guard" \
   --target-path /tmp/secure_mount \
@@ -238,25 +247,25 @@ cargo run --bin hecate-core -- policy add \
 #### Step D: Launch Core Daemon & Generate Agent Token
 ```bash
 # Start Management Server in background
-cargo run --bin hecate-core -- server --listen 127.0.0.1:50051 &
+hecate-core server --listen 127.0.0.1:50051 &
 
 # Mint an enrollment token (valid for 1 hour)
-cargo run --bin hecate-core -- agent token --hostname node-prod-01 --validity-seconds 3600
+hecate-core agent token --hostname node-prod-01 --validity-seconds 3600
 ```
 
 #### Step E: Enroll Agent & Protect Files
 ```bash
 # Enroll agent node with core
-cargo run --bin hecate-agent -- enroll --token <OTET_TOKEN> --core http://127.0.0.1:50051
+hecate-agent enroll --token <OTET_TOKEN> --core http://127.0.0.1:50051
 
 # Protect a plaintext file into a Hecate Guarded envelope
-cargo run --bin hecate-agent -- protect --source data.csv --dest data.csv.enc --key-id <KEY_ID> --passphrase "vault_secret"
+hecate-agent protect --source data.csv --dest data.csv.enc --key-id <KEY_ID> --passphrase "vault_secret"
 
 # Decrypt verified ciphertext envelope
-cargo run --bin hecate-agent -- unprotect --source data.csv.enc --dest restored.csv --passphrase "vault_secret"
+hecate-agent unprotect --source data.csv.enc --dest restored.csv --passphrase "vault_secret"
 
 # Execute a command within authorized Guard Point policy path context
-cargo run --bin hecate-agent -- exec --path /tmp/secure_mount /usr/bin/cat /tmp/secure_mount/data.csv
+hecate-agent exec --path /tmp/secure_mount /usr/bin/cat /tmp/secure_mount/data.csv
 ```
 
 ---
