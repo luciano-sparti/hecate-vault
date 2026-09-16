@@ -14,12 +14,54 @@ echo -e "${CYAN}${BOLD}═══════════════════
 echo -e "  ${GREEN}${BOLD}🛡️  HECATE ENTERPRISE SOFTWARE HSM & GUARD POINT AGENT DEMO${NC}"
 echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════════════════════${NC}\n"
 
-# 1. Build Workspace Binaries
-echo -e "${YELLOW}[Step 1/11] Building Hecate Core & Agent binaries...${NC}"
-cargo build --quiet
+# 1. Binary Detection / Build
+echo -e "${YELLOW}[Step 1/11] Locating Hecate Core & Agent binaries...${NC}"
 
-CORE_BIN="./target/debug/hecate-core"
-AGENT_BIN="./target/debug/hecate-agent"
+FORCE_BUILD=false
+if [[ "$*" == *"--build"* ]] || [[ "$*" == *"--rebuild"* ]]; then
+    FORCE_BUILD=true
+fi
+
+CORE_BIN=""
+AGENT_BIN=""
+
+if [ "$FORCE_BUILD" = false ]; then
+    if command -v hecate-core &>/dev/null && command -v hecate-agent &>/dev/null; then
+        CORE_BIN=$(command -v hecate-core)
+        AGENT_BIN=$(command -v hecate-agent)
+        echo -e "  ${GREEN}✓ Found installed binaries in PATH:${NC}"
+        echo -e "    • Core:  ${CYAN}$CORE_BIN${NC}"
+        echo -e "    • Agent: ${CYAN}$AGENT_BIN${NC}"
+    elif [ -x "$HOME/.cargo/bin/hecate-core" ] && [ -x "$HOME/.cargo/bin/hecate-agent" ]; then
+        CORE_BIN="$HOME/.cargo/bin/hecate-core"
+        AGENT_BIN="$HOME/.cargo/bin/hecate-agent"
+        echo -e "  ${GREEN}✓ Found installed binaries in ~/.cargo/bin:${NC}"
+        echo -e "    • Core:  ${CYAN}$CORE_BIN${NC}"
+        echo -e "    • Agent: ${CYAN}$AGENT_BIN${NC}"
+    elif [ -x "./target/release/hecate-core" ] && [ -x "./target/release/hecate-agent" ]; then
+        CORE_BIN="./target/release/hecate-core"
+        AGENT_BIN="./target/release/hecate-agent"
+        echo -e "  ${GREEN}✓ Found workspace release binaries in ./target/release:${NC}"
+        echo -e "    • Core:  ${CYAN}$CORE_BIN${NC}"
+        echo -e "    • Agent: ${CYAN}$AGENT_BIN${NC}"
+    elif [ -x "./target/debug/hecate-core" ] && [ -x "./target/debug/hecate-agent" ]; then
+        CORE_BIN="./target/debug/hecate-core"
+        AGENT_BIN="./target/debug/hecate-agent"
+        echo -e "  ${GREEN}✓ Found workspace debug binaries in ./target/debug:${NC}"
+        echo -e "    • Core:  ${CYAN}$CORE_BIN${NC}"
+        echo -e "    • Agent: ${CYAN}$AGENT_BIN${NC}"
+    fi
+fi
+
+if [ -z "$CORE_BIN" ] || [ -z "$AGENT_BIN" ]; then
+    echo -e "  ${CYAN}Building fresh workspace binaries with cargo build...${NC}"
+    cargo build --quiet
+    CORE_BIN="./target/debug/hecate-core"
+    AGENT_BIN="./target/debug/hecate-agent"
+    echo -e "  ${GREEN}✓ Built debug binaries:${NC}"
+    echo -e "    • Core:  ${CYAN}$CORE_BIN${NC}"
+    echo -e "    • Agent: ${CYAN}$AGENT_BIN${NC}"
+fi
 
 # Sandbox Directories
 DEMO_DIR="/tmp/hecate_demo_sandbox"
