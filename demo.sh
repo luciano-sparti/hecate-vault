@@ -15,7 +15,7 @@ echo -e "  ${GREEN}${BOLD}🛡️  HECATE ENTERPRISE SOFTWARE HSM & GUARD POINT 
 echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════════════════════${NC}\n"
 
 # 1. Binary Detection / Build
-echo -e "${YELLOW}[Step 1/11] Locating Hecate Core & Agent binaries...${NC}"
+echo -e "${YELLOW}[Step 1/14] Locating Hecate Core & Agent binaries...${NC}"
 
 FORCE_BUILD=false
 if [[ "$*" == *"--build"* ]] || [[ "$*" == *"--rebuild"* ]]; then
@@ -81,11 +81,11 @@ cleanup() {
 trap cleanup EXIT
 
 # 2. Initialize Core Software HSM with Shamir 3-of-5 DR Key Shares
-echo -e "\n${YELLOW}[Step 2/11] Initializing Software HSM & Shamir 3-of-5 Master Key Custody...${NC}"
+echo -e "\n${YELLOW}[Step 2/14] Initializing Software HSM & Shamir 3-of-5 Master Key Custody...${NC}"
 $CORE_BIN --data-dir "$CORE_DATA" init --shares 5 --threshold 3 --passphrase "EnterpriseMasterPassphrase2026!"
 
 # 3. HSM Key Lifecycle Management
-echo -e "\n${YELLOW}[Step 3/11] Creating and Rotating Key Encryption Keys (KEK) in Software HSM...${NC}"
+echo -e "\n${YELLOW}[Step 3/14] Creating and Rotating Key Encryption Keys (KEK) in Software HSM...${NC}"
 KEY_OUTPUT=$($CORE_BIN --data-dir "$CORE_DATA" key create --alias "prod-db-kek" --key-type aes256gcm)
 echo "$KEY_OUTPUT"
 KEY_ID=$(echo "$KEY_OUTPUT" | grep -o 'ID: [^,]*' | awk '{print $2}')
@@ -93,7 +93,7 @@ $CORE_BIN --data-dir "$CORE_DATA" key rotate --id "$KEY_ID"
 $CORE_BIN --data-dir "$CORE_DATA" key list
 
 # 4. Guard Point Policy Definition
-echo -e "\n${YELLOW}[Step 4/11] Configuring Guard Point Policy with Root-Containment & UID Matching...${NC}"
+echo -e "\n${YELLOW}[Step 4/14] Configuring Guard Point Policy with Root-Containment & UID Matching...${NC}"
 CURRENT_UID=$(id -u)
 $CORE_BIN --data-dir "$CORE_DATA" policy add \
     --id "gp-prod-db" \
@@ -108,28 +108,33 @@ $CORE_BIN --data-dir "$CORE_DATA" policy add \
 $CORE_BIN --data-dir "$CORE_DATA" policy list
 
 # 5. Start Hecate Core gRPC + mTLS Server Daemon
-echo -e "\n${YELLOW}[Step 5/11] Launching Hecate Core gRPC Management Server on port 50051...${NC}"
+echo -e "\n${YELLOW}[Step 5/14] Launching Hecate Core gRPC Management Server on port 50051...${NC}"
 $CORE_BIN --data-dir "$CORE_DATA" server --listen 127.0.0.1:50051 &
 CORE_PID=$!
 sleep 1
 
 # 6. Generate One-Time Enrollment Token (OTET)
-echo -e "\n${YELLOW}[Step 6/11] Generating Agent One-Time Enrollment Token (OTET)...${NC}"
+echo -e "\n${YELLOW}[Step 6/14] Generating Agent One-Time Enrollment Token (OTET)...${NC}"
 TOKEN_OUTPUT=$($CORE_BIN --data-dir "$CORE_DATA" agent token --hostname "node-prod-01")
 echo "$TOKEN_OUTPUT"
 TOKEN=$(echo "$TOKEN_OUTPUT" | grep "Token: " | awk '{print $2}')
 
 # 7. Enroll Agent with Core over gRPC / PKI
-echo -e "\n${YELLOW}[Step 7/11] Enrolling Agent with Core & Receiving Node X.509 Client Cert...${NC}"
-$AGENT_BIN --config-dir "$AGENT_DATA" enroll --core "http://127.0.0.1:50051" --token "$TOKEN"
-$AGENT_BIN --config-dir "$AGENT_DATA" status
+echo -e "\n${YELLOW}[Step 7/14] Enrolling Agent with Core & Receiving Node X.509 Client Cert...${NC}"
+ENROLL_OUTPUT=$($AGENT_BIN --config-dir "$AGENT_DATA" enroll --core "http://127.0.0.1:50051" --token "$TOKEN")
+echo "$ENROLL_OUTPUT"
+AGENT_ID=$(echo "$ENROLL_OUTPUT" | grep "Assigned Agent ID:" | awk '{print $4}')
 
 # 8. Synchronize Policies with Ed25519 Signature Verification
-echo -e "\n${YELLOW}[Step 8/11] Agent Running Policy Sync & Integrity Verification...${NC}"
+echo -e "\n${YELLOW}[Step 8/14] Agent Running Policy Sync & Integrity Verification...${NC}"
 $AGENT_BIN --config-dir "$AGENT_DATA" run --once
 
-# 9. Guard Point Transparent File Encryption & Decryption
-echo -e "\n${YELLOW}[Step 9/11] Demonstrating File Protection at Guard Point...${NC}"
+# 9. Verify Agent Status & Active Guard Points
+echo -e "\n${YELLOW}[Step 9/14] Checking Agent Status & Synchronized Guard Points...${NC}"
+$AGENT_BIN --config-dir "$AGENT_DATA" status
+
+# 10. Guard Point Transparent File Encryption & Decryption
+echo -e "\n${YELLOW}[Step 10/14] Demonstrating Transparent File Protection at Guard Point...${NC}"
 SAMPLE_FILE="$GUARD_TARGET/financial_records.csv"
 ENCRYPTED_FILE="$GUARD_BACKING/financial_records.csv.enc"
 RESTORED_FILE="$GUARD_TARGET/financial_records_decrypted.csv"
@@ -156,18 +161,31 @@ $AGENT_BIN --config-dir "$AGENT_DATA" unprotect \
 echo -e "\n  ${GREEN}Decrypted Verification (diff matches identically):${NC}"
 diff -u "$SAMPLE_FILE" "$RESTORED_FILE" && echo -e "  ${GREEN}✓ Decrypted file perfectly matches original plaintext!${NC}"
 
-# 10. Compliance Dashboard & Tamper-Evident Hash Chain Audit
-echo -e "\n${YELLOW}[Step 10/11] Reviewing Compliance Posture & Cryptographic Audit Ledger...${NC}"
+# 11. Guard Point Policy-Enforced Process Execution
+echo -e "\n${YELLOW}[Step 11/14] Guard Point Authorized Command Execution ('hecate-agent exec')...${NC}"
+$AGENT_BIN --config-dir "$AGENT_DATA" exec \
+    --path "$GUARD_TARGET" \
+    ls -- -lh "$GUARD_TARGET"
+
+# 12. Compliance Dashboard & Tamper-Evident Hash Chain Audit
+echo -e "\n${YELLOW}[Step 12/14] Reviewing Compliance Posture & Cryptographic Audit Ledger...${NC}"
 $CORE_BIN --data-dir "$CORE_DATA" compliance
 $CORE_BIN --data-dir "$CORE_DATA" agent list
 $CORE_BIN --data-dir "$CORE_DATA" audit
 
-# 11. Disaster Recovery Encrypted Backup & Restore
-echo -e "\n${YELLOW}[Step 11/11] Simulating Disaster Recovery Backup & Restoration...${NC}"
+# 13. Agent Revocation Lifecycle
+echo -e "\n${YELLOW}[Step 13/14] Revoking Agent Certificate & Verifying Revocation State...${NC}"
+$CORE_BIN --data-dir "$CORE_DATA" agent revoke --id "$AGENT_ID" --reason "End of node lifecycle"
+$CORE_BIN --data-dir "$CORE_DATA" agent list
+
+# 14. Disaster Recovery Encrypted Backup & Restore
+echo -e "\n${YELLOW}[Step 14/14] Simulating Disaster Recovery Backup & Restoration...${NC}"
 BACKUP_ARCHIVE="$DEMO_DIR/hecate_dr_backup.hct"
 $CORE_BIN --data-dir "$CORE_DATA" backup create --out "$BACKUP_ARCHIVE"
 $CORE_BIN --data-dir "$CORE_DATA" backup restore --file "$BACKUP_ARCHIVE"
 
 echo -e "\n${GREEN}${BOLD}═════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "  ${GREEN}${BOLD}✓ ALL DEMO FEATURES EXECUTED AND VERIFIED SUCCESSFULLY!${NC}"
+echo -e "  ${GREEN}${BOLD}✓ ALL 14 HECATE FEATURES EXECUTED AND VERIFIED SUCCESSFULLY!${NC}"
+echo -e "  ${CYAN}Tip: Launch the interactive terminal dashboard anytime with:${NC}"
+echo -e "       ${BOLD}$CORE_BIN --data-dir $CORE_DATA tui${NC}"
 echo -e "${GREEN}${BOLD}═════════════════════════════════════════════════════════════════════════${NC}"
