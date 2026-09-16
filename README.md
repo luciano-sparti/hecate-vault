@@ -20,6 +20,7 @@
 [![gRPC: Tonic & Prost](https://img.shields.io/badge/gRPC-Tonic%200.12-purple.svg)](https://github.com/hyperium/tonic)
 [![Crypto: AES--256--GCM](https://img.shields.io/badge/Crypto-AES--256--GCM%20%7C%20Ed25519-red.svg)](crates/hecate-crypto)
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux-lightgrey.svg?logo=linux)](https://kernel.org)
+[![Support: Ko-fi](https://img.shields.io/badge/Support-Ko--fi-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/lucianosp)
 
 <br/>
 
@@ -427,6 +428,12 @@ cargo test --workspace
 # Run the complete end-to-end multi-process lifecycle test suite
 cargo test --test e2e_core_agent
 ```
+
+---
+
+## ☕ Support
+
+If **Hecate Vault** helps secure your infrastructure, streamlines your secrets workflow, or saves you development time, consider [buying me a coffee on Ko-fi](https://ko-fi.com/lucianosp) — it directly supports ongoing maintenance and open-source security tooling! 🙏
 
 ---
 
