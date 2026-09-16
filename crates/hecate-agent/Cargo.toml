@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Agent daemon and Guard Point path encryption engine for Hecate"
 
 [[bin]]
@@ -11,8 +15,8 @@ name = "hecate-agent"
 path = "src/main.rs"
 
 [dependencies]
-hecate-crypto = { path = "../hecate-crypto" }
-hecate-protocol = { path = "../hecate-protocol" }
+hecate-crypto.workspace = true
+hecate-protocol.workspace = true
 tonic.workspace = true
 tokio.workspace = true
 prost.workspace = true

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Core and Management System (Software HSM Daemon & Admin CLI) for Hecate"
 
 [[bin]]
@@ -15,8 +19,8 @@ name = "hecate-tui"
 path = "src/bin/hecate_tui.rs"
 
 [dependencies]
-hecate-crypto = { path = "../hecate-crypto" }
-hecate-protocol = { path = "../hecate-protocol" }
+hecate-crypto.workspace = true
+hecate-protocol.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
 tonic.workspace = true
@@ -37,6 +41,6 @@ anyhow.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-hecate-agent = { path = "../hecate-agent" }
+hecate-agent.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile.workspace = true
