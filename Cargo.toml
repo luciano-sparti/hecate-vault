@@ -8,21 +8,22 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Luciano Sparti <https://github.com/luciano-sparti>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/luciano-sparti/hecate-vault"
 homepage = "https://github.com/luciano-sparti/hecate-vault"
+readme = "README.md"
 keywords = ["vault", "hsm", "encryption", "security", "tui"]
 categories = ["cryptography", "command-line-utilities"]
 
 [workspace.dependencies]
 # Internal Workspace Crates
-hecate-crypto = { version = "0.2.0", path = "crates/hecate-crypto" }
-hecate-protocol = { version = "0.2.0", path = "crates/hecate-protocol" }
-hecate-core = { version = "0.2.0", path = "crates/hecate-core" }
-hecate-agent = { version = "0.2.0", path = "crates/hecate-agent" }
+hecate-crypto = { version = "0.2.1", path = "crates/hecate-crypto" }
+hecate-protocol = { version = "0.2.1", path = "crates/hecate-protocol" }
+hecate-core = { version = "0.2.1", path = "crates/hecate-core" }
+hecate-agent = { version = "0.2.1", path = "crates/hecate-agent" }
 
 # Cryptography & Security
 aes-gcm = "0.10"

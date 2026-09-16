@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Agent daemon and Guard Point path encryption engine for Hecate"
