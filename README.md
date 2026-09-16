@@ -241,7 +241,7 @@ cargo run --bin hecate-core -- policy add \
 cargo run --bin hecate-core -- server --listen 127.0.0.1:50051 &
 
 # Mint an enrollment token (valid for 1 hour)
-cargo run --bin hecate-core -- agent token --hostname node-prod-01 --ttl 3600
+cargo run --bin hecate-core -- agent token --hostname node-prod-01 --validity-seconds 3600
 ```
 
 #### Step E: Enroll Agent & Protect Files
@@ -249,18 +249,23 @@ cargo run --bin hecate-core -- agent token --hostname node-prod-01 --ttl 3600
 # Enroll agent node with core
 cargo run --bin hecate-agent -- enroll --token <OTET_TOKEN> --core http://127.0.0.1:50051
 
-# Protect a plaintext file into the backing ciphertext store
-cargo run --bin hecate-agent -- protect --policy gp-prod-db --input data.csv --output data.csv.enc
+# Protect a plaintext file into a Hecate Guarded envelope
+cargo run --bin hecate-agent -- protect --source data.csv --dest data.csv.enc --key-id <KEY_ID> --passphrase "vault_secret"
 
-# Decrypt verified ciphertext
-cargo run --bin hecate-agent -- unprotect --policy gp-prod-db --input data.csv.enc --output restored.csv
+# Decrypt verified ciphertext envelope
+cargo run --bin hecate-agent -- unprotect --source data.csv.enc --dest restored.csv --passphrase "vault_secret"
+
+# Execute a command within authorized Guard Point policy path context
+cargo run --bin hecate-agent -- exec --path /tmp/secure_mount /usr/bin/cat /tmp/secure_mount/data.csv
 ```
 
 ---
 
 ## 📖 CLI Command Reference
 
-### `hecate-core`
+### `hecate-core` — Software HSM & Management Plane
+
+`hecate-core` controls Master Key lifecycle, HSM cryptographic operations, agent registrations, policy distribution, and audit verification.
 
 ```
 Usage: hecate-core [OPTIONS] <COMMAND>
@@ -278,31 +283,80 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-  -d, --data-dir <DATA_DIR>  Custom storage directory (default: ~/.hecate)
+  -d, --data-dir <DATA_DIR>  Storage directory [default: ~/.hecate]
   -h, --help                 Print help
   -V, --version              Print version
 ```
 
-### `hecate-agent`
+#### Subcommand Details:
+- **`hecate-core init`**:
+  - `-s, --shares <N>`: Total Shamir Master Key shares to create [default: `5`]
+  - `-t, --threshold <K>`: Minimum threshold shares required to unseal [default: `3`]
+  - `-p, --passphrase <PASS>`: Master Key derivation passphrase
+- **`hecate-core server`**:
+  - `-l, --listen <ADDR>`: gRPC bind host and port [default: `127.0.0.1:50051`]
+- **`hecate-core tui`**: Launch interactive Ratatui dashboard.
+- **`hecate-core key`**:
+  - `create -a, --alias <ALIAS> [-t, --key-type <aes256gcm>]`: Generate a new KEK in the HSM.
+  - `rotate -i, --id <KEY_ID>`: Incrementally rotate an existing KEK to a new cryptographic version.
+  - `list`: Display all managed HSM keys, aliases, and active version numbers.
+- **`hecate-core policy`**:
+  - `add --id <ID> --name <NAME> --target-path <PATH> --backing-path <PATH> --key-id <ID> [--deny-root] [--uids <UID1,UID2>] [--binary-hashes <SHA256,...>]`: Add or update a Guard Point policy.
+  - `list`: List all active Guard Point policies and assigned key IDs.
+- **`hecate-core agent`**:
+  - `token --hostname <HOST> [-v, --validity-seconds <SECS>]`: Mint a One-Time Enrollment Token (OTET).
+  - `list`: Show all enrolled agent nodes, certificate expiration, and compliance status.
+  - `revoke -i, --id <AGENT_ID>`: Instantly revoke an agent node's mTLS certificate.
+- **`hecate-core compliance`**: Inspect cluster-wide compliance status and posture telemetry.
+- **`hecate-core audit`**: Re-verify full SHA-256 hash chain proof across all immutable audit entries.
+- **`hecate-core backup`**:
+  - `create -o, --out <FILE.hct>`: Create an encrypted Disaster Recovery archive.
+  - `restore -f, --file <FILE.hct>`: Restore Vault state from an encrypted DR archive.
+
+---
+
+### `hecate-agent` — Endpoint Guard Point Daemon
+
+`hecate-agent` runs on protected hosts to enforce local Guard Point path encryption, process authorization, and periodic policy synchronization.
 
 ```
 Usage: hecate-agent [OPTIONS] <COMMAND>
 
 Commands:
-  enroll     Enroll this agent with Hecate Core using a One-Time Enrollment Token
-  run        Run the continuous compliance and policy synchronization daemon
-  status     Display the agent status, certificate validity, and local policies
-  protect    Encrypt a plaintext file into ciphertext under a Guard Point policy
-  unprotect  Decrypt a ciphertext file back to plaintext under a Guard Point policy
-  exec       Execute a command under the security context of a Guard Point policy
+  enroll     Enroll the Agent with a Hecate Core cluster using an OTET
+  run        Run the Agent daemon loop (sync policies, heartbeat, compliance scan)
+  status     Show local Agent status, active Guard Points, and compliance health
+  protect    Encrypt a file into a Hecate Guarded envelope
+  unprotect  Decrypt a Hecate Guarded envelope file
+  exec       Execute a command within an authorized Guard Point access context
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -c, --core <CORE>              Hecate Core gRPC endpoint URL (default: http://127.0.0.1:50051)
-      --config-dir <CONFIG_DIR>  Agent configuration directory (default: ~/.hecate-agent)
-  -h, --help                     Print help
-  -V, --version                  Print version
+  --config-dir <CONFIG_DIR>  Agent configuration directory [default: ~/.hecate-agent]
+  -h, --help                 Print help
+  -V, --version              Print version
 ```
+
+#### Subcommand Details:
+- **`hecate-agent enroll`**:
+  - `-c, --core <URL>`: Hecate Core gRPC endpoint URL [e.g. `http://127.0.0.1:50051` or `https://core.corp.internal:50051`]
+  - `-t, --token <OTET_TOKEN>`: One-Time Enrollment Token generated by `hecate-core agent token`
+- **`hecate-agent run`**:
+  - Runs in foreground/systemd service; continuously syncs Ed25519-signed policy envelopes and sends compliance heartbeats.
+- **`hecate-agent status`**:
+  - Displays agent ID, enrolled core endpoint, certificate validity, and locally cached Guard Point rules.
+- **`hecate-agent protect`**:
+  - `-s, --source <PATH>`: Source plaintext file to encrypt.
+  - `-d, --dest <PATH>`: Destination ciphertext envelope file.
+  - `-k, --key-id <KEY_ID>`: KEK identifier to bind.
+  - `-p, --passphrase <PASS>`: Optional encryption passphrase.
+- **`hecate-agent unprotect`**:
+  - `-s, --source <PATH>`: Source ciphertext envelope file to decrypt.
+  - `-d, --dest <PATH>`: Destination plaintext output file.
+  - `-p, --passphrase <PASS>`: Optional decryption passphrase.
+- **`hecate-agent exec`**:
+  - `-p, --path <PATH>`: Target Guard Point path.
+  - `<COMMAND> [-- <ARGS>...]`: Command and arguments to execute under policy inspection.
 
 ---
 
