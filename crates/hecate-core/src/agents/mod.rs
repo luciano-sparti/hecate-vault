@@ -195,3 +195,61 @@ impl AgentRegistry {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_agent_registry_token_and_enrollment_lifecycle() -> Result<()> {
+        let mut registry = AgentRegistry::new();
+
+        // 1. Generate token
+        let token = registry.generate_token("node-prod-01", 3600);
+        assert!(!token.token.is_empty());
+        assert_eq!(token.hostname, "node-prod-01");
+
+        // 2. Validate valid token
+        let agent_id = registry.validate_and_consume_token(&token.token)?;
+        assert!(!agent_id.is_empty());
+
+        // 3. Reject replaying used token
+        assert!(registry.validate_and_consume_token(&token.token).is_err());
+
+        // 4. Register agent
+        let agent = registry.register_agent(agent_id.clone(), "node-prod-01".to_string(), "Linux x86_64".to_string());
+        assert_eq!(agent.hostname, "node-prod-01");
+        assert!(!agent.is_revoked);
+        assert_eq!(agent.compliance_status, "COMPLIANT");
+
+        // 5. Update compliance
+        registry.update_compliance(&agent.agent_id, vec![
+            GuardPointCompliance {
+                path: "/data".to_string(),
+                is_mounted: true,
+                is_encrypted: true,
+                access_violations_count: 0,
+                status: "COMPLIANT".to_string(),
+                error_message: String::new(),
+            }
+        ])?;
+
+        let updated = registry.get_registered_agent(&agent.agent_id).unwrap();
+        assert_eq!(updated.compliance_status, "COMPLIANT");
+
+        // 6. Revoke agent
+        registry.revoke_agent(&agent.agent_id)?;
+        let revoked = registry.get_registered_agent(&agent.agent_id).unwrap();
+        assert!(revoked.is_revoked);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_expired_token_rejected() {
+        let mut registry = AgentRegistry::new();
+        // Token valid for -10 seconds (already expired)
+        let token = registry.generate_token("node-expired", -10);
+        assert!(registry.validate_and_consume_token(&token.token).is_err());
+    }
+}

@@ -315,4 +315,48 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_uninitialized_hsm_rejects_operations() {
+        let mut hsm = SoftwareHsm::new();
+        // Generate key before init
+        assert!(hsm.generate_key("kek-01", KeyType::Aes256Gcm, HashMap::new()).is_err());
+        // Rotate before init
+        assert!(hsm.rotate_key("non-existent").is_err());
+        // Export before init
+        assert!(hsm.export_encrypted_keys().is_err());
+        // Encrypt before init
+        let secret = SecretBuffer::from_str("data");
+        assert!(hsm.encrypt("key-01", &secret, b"").is_err());
+    }
+
+    #[test]
+    fn test_hsm_non_existent_key_operations() -> Result<()> {
+        let mut hsm = SoftwareHsm::new();
+        hsm.init(generate_key_256())?;
+
+        let secret = SecretBuffer::from_str("payload");
+        assert!(hsm.encrypt("fake-key-id", &secret, b"").is_err());
+        assert!(hsm.rotate_key("fake-key-id").is_err());
+        assert!(hsm.unwrap_key("fake-key-id", &[0u8; 32], &[0u8; 12]).is_err());
+        assert!(hsm.destroy_key("fake-key-id").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_hsm_aad_mismatch_fails_decryption() -> Result<()> {
+        let mut hsm = SoftwareHsm::new();
+        hsm.init(generate_key_256())?;
+
+        let kek = hsm.generate_key("kek-aad", KeyType::Aes256Gcm, HashMap::new())?;
+        let plaintext = SecretBuffer::from_str("AuthenticatedPayload");
+        let (ct, nonce, _) = hsm.encrypt(&kek.key_id, &plaintext, b"correct-aad")?;
+
+        // Decrypt with wrong AAD must fail
+        assert!(hsm.decrypt(&kek.key_id, &ct, &nonce, b"wrong-aad").is_err());
+        // Decrypt with correct AAD must succeed
+        let recovered = hsm.decrypt(&kek.key_id, &ct, &nonce, b"correct-aad")?;
+        assert_eq!(plaintext.as_bytes(), recovered.as_bytes());
+        Ok(())
+    }
 }

@@ -89,3 +89,44 @@ impl FileGuard {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_file_guard_encrypt_and_decrypt_cycle() -> Result<()> {
+        let dir = tempdir()?;
+        let src = dir.path().join("plaintext.txt");
+        let enc = dir.path().join("ciphertext.enc");
+        let restored = dir.path().join("restored.txt");
+
+        let original_data = b"DatabaseCredentials,SecretKeys,API_TOKENS_2026";
+        fs::write(&src, original_data)?;
+
+        let passphrase = SecretBuffer::from_str("AgentGuardPassphrase123!");
+
+        // 1. Encrypt
+        FileGuard::encrypt_file(&src, &enc, "kek-prod-db", &passphrase)?;
+        assert!(enc.exists());
+
+        // 2. Decrypt
+        FileGuard::decrypt_file(&enc, &restored, &passphrase)?;
+        let decrypted_bytes = fs::read(&restored)?;
+        assert_eq!(original_data.as_slice(), decrypted_bytes.as_slice());
+
+        // 3. Wrong passphrase fails
+        let wrong_passphrase = SecretBuffer::from_str("WrongPassphrase!");
+        let wrong_dest = dir.path().join("wrong.txt");
+        assert!(FileGuard::decrypt_file(&enc, &wrong_dest, &wrong_passphrase).is_err());
+
+        // 4. Corrupted file fails
+        let corrupt_file = dir.path().join("corrupt.enc");
+        fs::write(&corrupt_file, b"NOT_A_VALID_HEADER")?;
+        assert!(FileGuard::decrypt_file(&corrupt_file, &wrong_dest, &passphrase).is_err());
+
+        Ok(())
+    }
+}

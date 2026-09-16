@@ -287,4 +287,40 @@ mod tests {
         assert_eq!(shares[0].data, parsed.data);
         Ok(())
     }
+
+    #[test]
+    fn test_shamir_invalid_configurations() {
+        let secret = SecretBuffer::from_str("SampleSecretKey");
+        // Threshold > Total
+        assert!(split_secret(&secret, 5, 3).is_err());
+        // Threshold < 2
+        assert!(split_secret(&secret, 1, 3).is_err());
+        // Threshold 0
+        assert!(split_secret(&secret, 0, 5).is_err());
+    }
+
+    #[test]
+    fn test_shamir_corrupted_share_produces_invalid_secret() -> Result<()> {
+        let original_secret = SecretBuffer::from_str("CriticalMasterKeyToVerify");
+        let shares = split_secret(&original_secret, 3, 5)?;
+
+        let mut tampered_shares = vec![shares[0].clone(), shares[1].clone(), shares[2].clone()];
+        // Corrupt one byte of share 0
+        tampered_shares[0].data[0] ^= 0xFF;
+
+        let reconstructed = combine_shares(&tampered_shares)?;
+        assert_ne!(original_secret.as_bytes(), reconstructed.as_bytes());
+        Ok(())
+    }
+
+    #[test]
+    fn test_shamir_duplicate_shares_rejected() -> Result<()> {
+        let original_secret = SecretBuffer::from_str("DuplicateShareTestSecret");
+        let shares = split_secret(&original_secret, 3, 5)?;
+
+        // Duplicate share 0 to reach count 3 with only 2 distinct shares
+        let duplicate_subset = vec![shares[0].clone(), shares[0].clone(), shares[1].clone()];
+        assert!(combine_shares(&duplicate_subset).is_err());
+        Ok(())
+    }
 }

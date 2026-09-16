@@ -69,6 +69,10 @@ impl PolicyStore {
         self.policies.get_mut(id)
     }
 
+    pub fn remove_policy(&mut self, id: &str) -> bool {
+        self.policies.remove(id).is_some()
+    }
+
     pub fn sign_policies(&mut self, signer: &PolicySigner) -> Result<Vec<SignedPolicyEnvelope>> {
         let mut envelopes = Vec::new();
         for policy in self.policies.values() {
@@ -92,5 +96,58 @@ impl PolicyStore {
             });
         }
         Ok(envelopes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hecate_crypto::verify_signature;
+
+    #[test]
+    fn test_policy_store_crud_and_signing() -> Result<()> {
+        let mut store = PolicyStore::new();
+        let signer = PolicySigner::generate();
+
+        let policy = GuardPointPolicy {
+            policy_id: "gp-db-01".to_string(),
+            policy_name: "Production DB Guard".to_string(),
+            target_path: "/var/lib/db".to_string(),
+            backing_path: "/var/lib/db.enc".to_string(),
+            key_id: "key-123".to_string(),
+            deny_root_unauthorized: true,
+            rules: vec![],
+            policy_version: 1,
+            updated_at: 1700000000,
+        };
+
+        // 1. Add policy
+        let id = store.add_or_update_policy(policy.clone());
+        assert_eq!(id, "gp-db-01");
+        assert_eq!(store.list_policies().len(), 1);
+
+        // 2. Retrieve policy
+        let fetched = store.get_policy("gp-db-01").unwrap();
+        assert_eq!(fetched.policy_name, "Production DB Guard");
+
+        // 3. Sign policy envelopes
+        let envelopes = store.sign_policies(&signer)?;
+        assert_eq!(envelopes.len(), 1);
+        let env = &envelopes[0];
+        assert_eq!(env.sequence_number, 2);
+
+        // Verify signature
+        let mut sign_message = env.policy_payload_bytes.clone();
+        sign_message.extend_from_slice(&env.timestamp.to_be_bytes());
+        sign_message.extend_from_slice(&env.sequence_number.to_be_bytes());
+        let valid = verify_signature(&signer.verifying_key().to_bytes(), &sign_message, &env.core_signature)?;
+        assert!(valid);
+
+        // 4. Remove policy
+        assert!(store.remove_policy("gp-db-01"));
+        assert!(store.list_policies().is_empty());
+        assert!(!store.remove_policy("gp-db-01"));
+
+        Ok(())
     }
 }

@@ -1,23 +1,18 @@
-mod cli;
-mod client;
-mod compliance;
-mod guard;
-mod sync;
-
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
-use cli::{Cli, Commands};
-use client::AgentClient;
 use colored::Colorize;
-use compliance::ComplianceAuditor;
-use guard::{FileGuard, ProcessContext};
+use hecate_agent::cli::{Cli, Commands};
+use hecate_agent::client::AgentClient;
+use hecate_agent::compliance::ComplianceAuditor;
+use hecate_agent::guard::{Authorizer, FileGuard, ProcessContext};
+use hecate_agent::sync::PolicySynchronizer;
 use hecate_crypto::SecretBuffer;
+use hecate_protocol::policy::PermissionAction;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use sync::PolicySynchronizer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -49,6 +44,7 @@ async fn main() -> Result<()> {
     let args = Cli::parse();
     let config_dir = resolve_config_dir(args.config_dir)?;
     let config_file = config_dir.join("agent_config.json");
+    let policies_file = config_dir.join("policies.json");
 
     match args.command {
         Commands::Enroll { core, token } => {
@@ -104,6 +100,7 @@ async fn main() -> Result<()> {
                 if let Ok(res) = sync_res {
                     if let Ok(policies) = sync_engine.verify_and_apply_envelopes(&res.signed_policies) {
                         println!("{} Synchronized {} active policies from Core", "✓".green(), policies.len());
+                        let _ = sync_engine.save_to_file(&policies_file);
                         let compliance_items = ComplianceAuditor::audit_all(&policies, &HashMap::new());
                         let _ = client.report_compliance(config.agent_id.clone(), compliance_items).await;
                     }
@@ -130,6 +127,14 @@ async fn main() -> Result<()> {
             println!("  Agent ID: {}", config.agent_id.yellow());
             println!("  Core Endpoint: {}", config.core_url.cyan());
             println!("  Cert Expiration: {}", chrono::DateTime::from_timestamp(config.cert_expires_at, 0).unwrap_or_default());
+
+            let mut sync_engine = PolicySynchronizer::new(config.core_signing_public_key_hex);
+            let _ = sync_engine.load_from_file(&policies_file);
+            let active = sync_engine.get_policies();
+            println!("  Active Guard Points ({}):", active.len());
+            for p in &active {
+                println!("    • [{}] {} -> {} (deny_root: {})", p.policy_id.cyan(), p.policy_name, p.target_path.yellow(), p.deny_root_unauthorized);
+            }
             println!("  Status: {}", "ONLINE / COMPLIANT".green().bold());
         }
 
@@ -167,7 +172,25 @@ async fn main() -> Result<()> {
 
         Commands::Exec { path, command, args } => {
             let ctx = ProcessContext::current();
-            println!("{} Evaluating process credentials (UID: {}, Binary: {})...", "🔍".cyan(), ctx.uid, ctx.binary_path);
+            println!("{} Evaluating process credentials (PID: {}, UID: {}, GID: {}, Binary: {} [SHA256: {}])...",
+                "🔍".cyan(), ctx.pid, ctx.uid, ctx.gid, ctx.binary_path, if ctx.binary_sha256.len() >= 8 { &ctx.binary_sha256[..8] } else { &ctx.binary_sha256 });
+
+            if config_file.exists() {
+                let contents = fs::read_to_string(&config_file)?;
+                let config: AgentConfig = serde_json::from_str(&contents)?;
+                let mut sync_engine = PolicySynchronizer::new(config.core_signing_public_key_hex);
+                let _ = sync_engine.load_from_file(&policies_file);
+
+                if let Some(policy) = sync_engine.get_policy_by_path(&path) {
+                    let (authorized, reason) = Authorizer::is_authorized(policy, &ctx, PermissionAction::ActionReadWrite);
+                    if !authorized {
+                        let r = reason.unwrap_or_else(|| "Unauthorized access".to_string());
+                        eprintln!("{} Execution rejected by Guard Point policy '{}': {}", "⛔".red().bold(), policy.policy_name, r.red());
+                        return Err(anyhow!("Access denied by Guard Point policy: {}", r));
+                    }
+                    println!("{} Access granted by Guard Point policy '{}'", "✓".green(), policy.policy_name.bold());
+                }
+            }
 
             // Execute subprocess
             let mut cmd = Command::new(&command);

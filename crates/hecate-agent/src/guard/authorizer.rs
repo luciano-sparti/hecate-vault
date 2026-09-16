@@ -152,4 +152,82 @@ mod tests {
         let (denied, _) = Authorizer::is_authorized(&policy, &unauthorized_ctx, PermissionAction::ActionRead);
         assert!(!denied);
     }
+
+    #[test]
+    fn test_root_containment_deny_root_unauthorized() {
+        let policy = GuardPointPolicy {
+            policy_id: "gp-root-secure".to_string(),
+            policy_name: "Root Guarded Path".to_string(),
+            target_path: "/root/vault".to_string(),
+            backing_path: "/root/vault_backing".to_string(),
+            key_id: "key-root".to_string(),
+            deny_root_unauthorized: true,
+            rules: vec![PolicyRule {
+                rule_id: "rule-app".to_string(),
+                subjects: vec![hecate_protocol::policy::PolicySubject {
+                    subject_type: SubjectType::Uid as i32,
+                    identifier: "1000".to_string(),
+                }],
+                action: PermissionAction::ActionReadWrite as i32,
+                allow: true,
+            }],
+            policy_version: 1,
+            updated_at: 0,
+        };
+
+        // Root process without explicit rule must be rejected
+        let root_ctx = ProcessContext {
+            pid: 1,
+            uid: 0,
+            gid: 0,
+            binary_path: "/usr/bin/cat".to_string(),
+            binary_sha256: "deadbeef".to_string(),
+        };
+
+        let (allowed, reason) = Authorizer::is_authorized(&policy, &root_ctx, PermissionAction::ActionRead);
+        assert!(!allowed);
+        assert!(reason.unwrap().contains("Root access denied"));
+    }
+
+    #[test]
+    fn test_binary_hash_authorization() {
+        let trusted_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let policy = GuardPointPolicy {
+            policy_id: "gp-hash-guard".to_string(),
+            policy_name: "Hash Guard".to_string(),
+            target_path: "/data/proc".to_string(),
+            backing_path: "/data/proc_backing".to_string(),
+            key_id: "key-hash".to_string(),
+            deny_root_unauthorized: false,
+            rules: vec![PolicyRule {
+                rule_id: "rule-hash".to_string(),
+                subjects: vec![hecate_protocol::policy::PolicySubject {
+                    subject_type: SubjectType::BinaryHash as i32,
+                    identifier: trusted_hash.to_string(),
+                }],
+                action: PermissionAction::ActionReadWrite as i32,
+                allow: true,
+            }],
+            policy_version: 1,
+            updated_at: 0,
+        };
+
+        let valid_binary_ctx = ProcessContext {
+            pid: 500,
+            uid: 1000,
+            gid: 1000,
+            binary_path: "/usr/local/bin/trusted_app".to_string(),
+            binary_sha256: trusted_hash.to_string(),
+        };
+        assert!(Authorizer::is_authorized(&policy, &valid_binary_ctx, PermissionAction::ActionRead).0);
+
+        let untrusted_binary_ctx = ProcessContext {
+            pid: 501,
+            uid: 1000,
+            gid: 1000,
+            binary_path: "/usr/local/bin/untrusted_app".to_string(),
+            binary_sha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
+        };
+        assert!(!Authorizer::is_authorized(&policy, &untrusted_binary_ctx, PermissionAction::ActionRead).0);
+    }
 }

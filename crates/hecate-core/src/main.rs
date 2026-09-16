@@ -1,103 +1,25 @@
-mod agents;
-mod audit;
-mod cli;
-mod ha;
-mod pki;
-mod policy;
-mod secrets;
-mod server;
-
-use agents::AgentRegistry;
 use anyhow::{Context, Result};
-use audit::AuditLedger;
 use clap::Parser;
-use cli::{AgentCommands, BackupCommands, Cli, Commands, KeyCommands, PolicyCommands};
 use colored::Colorize;
-use ha::backup::{create_dr_backup, restore_dr_backup};
+use hecate_core::audit::AuditLedger;
+use hecate_core::cli::{AgentCommands, BackupCommands, Cli, Commands, KeyCommands, PolicyCommands};
+use hecate_core::ha::backup::{create_dr_backup, restore_dr_backup};
+use hecate_core::pki::InternalCertificateAuthority;
+use hecate_core::secrets::{VaultDatabase, VaultStorage};
+use hecate_core::server::HecateCoreServer;
+use hecate_core::{load_or_init_core_state, resolve_base_dir};
 use hecate_crypto::{
-    derive_key_argon2id, detect_root_trust, generate_key_256, generate_salt, split_secret,
-    KeyType, PolicySigner, SecretBuffer, SoftwareHsm,
+    derive_key_argon2id, detect_root_trust, generate_salt, split_secret,
+    KeyType, PolicySigner, SecretBuffer,
 };
 use hecate_protocol::admin::admin_service_server::AdminServiceServer;
 use hecate_protocol::agent::agent_service_server::AgentServiceServer;
 use hecate_protocol::hsm::hsm_crypto_service_server::HsmCryptoServiceServer;
 use hecate_protocol::policy::{GuardPointPolicy, PermissionAction, PolicyRule, PolicySubject, SubjectType};
-use pki::InternalCertificateAuthority;
-use policy::PolicyStore;
-use secrets::{VaultDatabase, VaultStorage};
-use server::{CoreState, HecateCoreServer};
 use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tonic::transport::Server;
-
-fn resolve_base_dir(custom_dir: Option<String>) -> Result<PathBuf> {
-    if let Some(dir) = custom_dir {
-        let p = PathBuf::from(dir);
-        fs::create_dir_all(&p)?;
-        Ok(p)
-    } else {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .context("Could not determine home directory")?;
-        let dir = PathBuf::from(home).join(".hecate");
-        fs::create_dir_all(&dir)?;
-        Ok(dir)
-    }
-}
-
-fn load_or_init_core_state(base_dir: &Path) -> Result<Arc<RwLock<CoreState>>> {
-    let vault_storage = VaultStorage::new(base_dir.join("vault.json"));
-    let vault_db = if vault_storage.exists() {
-        vault_storage.load()?
-    } else {
-        let salt = generate_salt();
-        VaultDatabase::new("primary-vault", hex::encode(salt), "tpm2".to_string())
-    };
-
-    let salt = hex::decode(&vault_db.kdf_salt_hex).unwrap_or_else(|_| generate_salt());
-    let master_key = derive_key_argon2id(&SecretBuffer::from_str("default_master_passphrase_hecate_vault"), &salt)?;
-
-    let mut hsm = SoftwareHsm::new();
-    hsm.init(master_key)?;
-
-    if let (Some(enc_hex), Some(nonce_hex)) = (&vault_db.encrypted_hsm_state_hex, &vault_db.hsm_nonce_hex) {
-        let _ = hsm.import_encrypted_keys(enc_hex, nonce_hex);
-    }
-
-    let policy_store = PolicyStore::load_or_create(&base_dir.join("policies.json"))?;
-    let agent_registry = AgentRegistry::load_or_create(&base_dir.join("agents.json"))?;
-    let audit_ledger = AuditLedger::open_or_create(&base_dir.join("audit.log"))?;
-    let pki = InternalCertificateAuthority::generate_or_load(&base_dir.join("pki.json"))?;
-
-    let signer_key_path = base_dir.join("signing_key.hex");
-    let policy_signer = if signer_key_path.exists() {
-        let hex_str = fs::read_to_string(&signer_key_path)?;
-        let bytes = hex::decode(hex_str.trim())?;
-        PolicySigner::from_bytes(&bytes)?
-    } else {
-        let signer = PolicySigner::generate();
-        fs::write(&signer_key_path, hex::encode(signer.to_bytes()))?;
-        signer
-    };
-
-    let state = CoreState {
-        hsm,
-        vault_storage,
-        vault_db,
-        policy_store,
-        policy_signer,
-        agent_registry,
-        audit_ledger,
-        pki,
-        base_dir: base_dir.to_path_buf(),
-    };
-
-    Ok(Arc::new(RwLock::new(state)))
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {

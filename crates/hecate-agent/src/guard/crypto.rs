@@ -29,3 +29,26 @@ impl KeyCache {
         map.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_key_cache_operations() {
+        let cache = KeyCache::new();
+
+        // 1. Get non-existent
+        assert!(cache.get("key-101").is_none());
+
+        // 2. Insert and fetch
+        let secret = SecretBuffer::from_str("cached_key_secret_value");
+        cache.insert("key-101", secret.clone());
+        let fetched = cache.get("key-101").expect("key not found in cache");
+        assert_eq!(secret.as_bytes(), fetched.as_bytes());
+
+        // 3. Clear cache
+        cache.clear();
+        assert!(cache.get("key-101").is_none());
+    }
+}

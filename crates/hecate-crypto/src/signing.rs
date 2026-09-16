@@ -94,6 +94,28 @@ mod tests {
         let is_invalid = verify_signature(&pub_bytes, b"TamperedPayload", &sig)?;
         assert!(!is_invalid);
 
+        // Hex verification
+        let pub_hex = hex::encode(pub_bytes);
+        assert!(verify_signature_hex(&pub_hex, payload, &sig)?);
+        assert!(!verify_signature_hex(&pub_hex, b"Tampered", &sig)?);
+
         Ok(())
+    }
+
+    #[test]
+    fn test_signer_serialization_roundtrip() -> Result<()> {
+        let original = PolicySigner::generate();
+        let bytes = original.to_bytes();
+        let restored = PolicySigner::from_bytes(&bytes)?;
+
+        let message = b"PolicyDataPayload-001";
+        let sig = restored.sign(message);
+        assert!(verify_signature(&original.verifying_key().to_bytes(), message, &sig)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_hex_public_key() {
+        assert!(verify_signature_hex("invalid-hex-non-hex-characters", b"msg", &[0u8; 64]).is_err());
     }
 }

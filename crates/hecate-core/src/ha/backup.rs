@@ -67,3 +67,35 @@ pub fn restore_dr_backup(
 
     Ok(decrypted.as_bytes().to_vec())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dr_backup_create_and_restore_cycle() -> Result<()> {
+        let payload = b"VaultState: Keys=5, Policies=3, Agents=2, LedgerHeight=100";
+        let passphrase = SecretBuffer::from_str("CorrectDisasterRecoveryPassphrase2026!");
+
+        // 1. Create backup
+        let (archive_bytes, sha256_hash) = create_dr_backup(payload, &passphrase)?;
+        assert!(!archive_bytes.is_empty());
+        assert_eq!(sha256_hash.len(), 64);
+
+        // 2. Restore with correct passphrase
+        let restored = restore_dr_backup(&archive_bytes, &passphrase)?;
+        assert_eq!(payload.as_slice(), restored.as_slice());
+
+        // 3. Restore with wrong passphrase must fail
+        let wrong_pass = SecretBuffer::from_str("WrongPassphrase!");
+        assert!(restore_dr_backup(&archive_bytes, &wrong_pass).is_err());
+
+        // 4. Tampered archive integrity failure
+        let mut archive: DisasterRecoveryArchive = serde_json::from_slice(&archive_bytes)?;
+        archive.payload_sha256 = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let tampered_bytes = serde_json::to_vec(&archive)?;
+        assert!(restore_dr_backup(&tampered_bytes, &passphrase).is_err());
+
+        Ok(())
+    }
+}

@@ -111,3 +111,31 @@ impl InternalCertificateAuthority {
         Ok((client_cert_pem, client_key_pem, expires_at))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_pki_ca_generation_and_client_cert_issuance() -> Result<()> {
+        let dir = tempdir()?;
+        let pki_path = dir.path().join("pki.json");
+
+        // 1. Generate new CA
+        let ca = InternalCertificateAuthority::generate_or_load(&pki_path)?;
+        assert!(ca.ca_cert_pem.contains("BEGIN CERTIFICATE"));
+
+        // 2. Issue client certificate
+        let (cert_pem, key_pem, expires_at) = ca.issue_client_certificate("node-test", "agent-101")?;
+        assert!(cert_pem.contains("BEGIN CERTIFICATE"));
+        assert!(key_pem.contains("BEGIN PRIVATE KEY"));
+        assert!(expires_at > chrono::Utc::now().timestamp());
+
+        // 3. Load existing CA from disk
+        let loaded_ca = InternalCertificateAuthority::generate_or_load(&pki_path)?;
+        assert_eq!(ca.ca_cert_pem, loaded_ca.ca_cert_pem);
+
+        Ok(())
+    }
+}
