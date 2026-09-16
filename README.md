@@ -11,6 +11,8 @@
 
 ### Enterprise Software HSM, Asymmetric Policy Governance, Transparent File Guard, and Tamper-Evident Security Vault in Rust.
 
+[![Crates.io](https://img.shields.io/crates/v/hecate-core.svg?logo=rust)](https://crates.io/crates/hecate-core)
+[![Docs.rs](https://docs.rs/hecate-core/badge.svg)](https://docs.rs/hecate-core)
 [![CI](https://github.com/luciano-sparti/hecate-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/luciano-sparti/hecate-vault/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust: 2024 Edition](https://img.shields.io/badge/Rust-2024%20Edition-orange.svg?logo=rust)](https://www.rust-lang.org/)
@@ -183,7 +185,19 @@ cargo run --bin hecate-tui -- --data-dir /tmp/hecate_demo_sandbox/core_data
 
 ## 🚀 Quick Start & Demo
 
-### 1. Run the Turnkey Automated Demo
+### 1. Installation via Cargo
+
+Install pre-packaged CLI binaries directly from [crates.io](https://crates.io):
+
+```bash
+# Install Software HSM & Management Plane CLI + TUI
+cargo install hecate-core
+
+# Install Endpoint Guard Point Agent Daemon
+cargo install hecate-agent
+```
+
+### 2. Run the Turnkey Automated Demo
 
 The repository includes a self-contained demonstration script that builds all crates, initializes the Soft-HSM with 3-of-5 Shamir custody, creates and rotates KEKs, spins up the gRPC server, enrolls an agent via OTET, synchronizes policies, executes file encryption/decryption at a Guard Point, verifies compliance telemetry, tests the audit hash chain, and executes a full DR backup/restore:
 
@@ -192,7 +206,7 @@ chmod +x ./demo.sh
 ./demo.sh
 ```
 
-### 2. Manual CLI Walkthrough
+### 3. Manual CLI Walkthrough
 
 #### Step A: Initialize Core HSM
 ```bash
