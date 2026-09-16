@@ -1,0 +1,123 @@
+syntax = "proto3";
+package hecate.admin;
+
+import "policy.proto";
+
+service AdminService {
+  rpc GenerateEnrollmentToken (GenerateTokenRequest) returns (GenerateTokenResponse);
+  rpc ListAgents (ListAgentsRequest) returns (ListAgentsResponse);
+  rpc RevokeAgent (RevokeAgentRequest) returns (RevokeAgentResponse);
+  rpc CreatePolicy (CreatePolicyRequest) returns (CreatePolicyResponse);
+  rpc UpdatePolicy (UpdatePolicyRequest) returns (UpdatePolicyResponse);
+  rpc ListPolicies (ListPoliciesRequest) returns (ListPoliciesResponse);
+  rpc GetComplianceDashboard (ComplianceDashboardRequest) returns (ComplianceDashboardResponse);
+  rpc ExportAuditLogs (AuditExportRequest) returns (AuditExportResponse);
+  rpc CreateBackup (CreateBackupRequest) returns (CreateBackupResponse);
+  rpc RestoreBackup (RestoreBackupRequest) returns (RestoreBackupResponse);
+}
+
+message GenerateTokenRequest {
+  string agent_hostname = 1;
+  int64 validity_seconds = 2;
+}
+
+message GenerateTokenResponse {
+  string token = 1;
+  int64 expires_at = 2;
+}
+
+message ListAgentsRequest {}
+
+message AgentInfo {
+  string agent_id = 1;
+  string hostname = 2;
+  string os_info = 3;
+  int64 enrolled_at = 4;
+  int64 last_heartbeat = 5;
+  string compliance_status = 6;
+  bool is_revoked = 7;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+message RevokeAgentRequest {
+  string agent_id = 1;
+  string reason = 2;
+}
+
+message RevokeAgentResponse {
+  bool success = 1;
+}
+
+message CreatePolicyRequest {
+  hecate.policy.GuardPointPolicy policy = 1;
+}
+
+message CreatePolicyResponse {
+  string policy_id = 1;
+}
+
+message UpdatePolicyRequest {
+  hecate.policy.GuardPointPolicy policy = 1;
+}
+
+message UpdatePolicyResponse {
+  bool success = 1;
+  uint32 new_version = 2;
+}
+
+message ListPoliciesRequest {}
+
+message ListPoliciesResponse {
+  repeated hecate.policy.GuardPointPolicy policies = 1;
+}
+
+message ComplianceDashboardRequest {}
+
+message ComplianceDashboardResponse {
+  uint32 total_agents = 1;
+  uint32 compliant_agents = 2;
+  uint32 non_compliant_agents = 3;
+  repeated AgentInfo agent_details = 4;
+}
+
+message AuditExportRequest {
+  int64 from_timestamp = 1;
+  int64 to_timestamp = 2;
+}
+
+message AuditRecord {
+  uint64 index = 1;
+  string timestamp = 2;
+  string action = 3;
+  string actor = 4;
+  string details = 5;
+  string prev_hash = 6;
+  string entry_hash = 7;
+}
+
+message AuditExportResponse {
+  repeated AuditRecord records = 1;
+  bool chain_integrity_valid = 2;
+}
+
+message CreateBackupRequest {
+  string backup_passphrase = 1;
+}
+
+message CreateBackupResponse {
+  bytes encrypted_archive = 1;
+  string archive_sha256 = 2;
+}
+
+message RestoreBackupRequest {
+  bytes encrypted_archive = 1;
+  string backup_passphrase = 2;
+}
+
+message RestoreBackupResponse {
+  bool success = 1;
+  string message = 2;
+}

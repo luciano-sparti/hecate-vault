@@ -1,0 +1,42 @@
+[package]
+name = "hecate-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core and Management System (Software HSM Daemon & Admin CLI) for Hecate"
+
+[[bin]]
+name = "hecate-core"
+path = "src/main.rs"
+
+[[bin]]
+name = "hecate-tui"
+path = "src/bin/hecate_tui.rs"
+
+[dependencies]
+hecate-crypto = { path = "../hecate-crypto" }
+hecate-protocol = { path = "../hecate-protocol" }
+ratatui.workspace = true
+crossterm.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+prost.workspace = true
+clap.workspace = true
+colored.workspace = true
+rcgen.workspace = true
+tempfile.workspace = true
+fd-lock.workspace = true
+hex.workspace = true
+sha2.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+hecate-agent = { path = "../hecate-agent" }
+tokio = { workspace = true, features = ["full", "test-util"] }
+tempfile.workspace = true

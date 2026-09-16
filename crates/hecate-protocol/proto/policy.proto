@@ -1,0 +1,50 @@
+syntax = "proto3";
+package hecate.policy;
+
+enum SubjectType {
+  SUBJECT_TYPE_UNSPECIFIED = 0;
+  SUBJECT_TYPE_USER = 1;
+  SUBJECT_TYPE_UID = 2;
+  SUBJECT_TYPE_GID = 3;
+  SUBJECT_TYPE_BINARY_HASH = 4;
+  SUBJECT_TYPE_ROLE = 5;
+}
+
+enum PermissionAction {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_READ = 1;
+  ACTION_WRITE = 2;
+  ACTION_READ_WRITE = 3;
+  ACTION_AUDIT_ONLY = 4;
+}
+
+message PolicySubject {
+  SubjectType subject_type = 1;
+  string identifier = 2;
+}
+
+message PolicyRule {
+  string rule_id = 1;
+  repeated PolicySubject subjects = 2;
+  PermissionAction action = 3;
+  bool allow = 4;
+}
+
+message GuardPointPolicy {
+  string policy_id = 1;
+  string policy_name = 2;
+  string target_path = 3;
+  string backing_path = 4;
+  string key_id = 5;
+  bool deny_root_unauthorized = 6;
+  repeated PolicyRule rules = 7;
+  uint32 policy_version = 8;
+  int64 updated_at = 9;
+}
+
+message SignedPolicyEnvelope {
+  bytes policy_payload_bytes = 1;
+  bytes core_signature = 2;
+  int64 timestamp = 3;
+  uint32 sequence_number = 4;
+}

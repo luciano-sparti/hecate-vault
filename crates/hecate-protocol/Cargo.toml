@@ -1,0 +1,21 @@
+[package]
+name = "hecate-protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Protobuf contracts and shared schemas for Hecate"
+
+[dependencies]
+prost.workspace = true
+tonic.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+hex.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
+prost-build.workspace = true

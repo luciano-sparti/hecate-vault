@@ -1,1 +1,4 @@
 /target
+*.log
+*.hct
+.DS_Store

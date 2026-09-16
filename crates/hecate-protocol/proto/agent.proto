@@ -1,0 +1,80 @@
+syntax = "proto3";
+package hecate.agent;
+
+import "policy.proto";
+
+service AgentService {
+  rpc EnrollAgent (EnrollRequest) returns (EnrollResponse);
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+  rpc SyncPolicies (SyncPolicyRequest) returns (SyncPolicyResponse);
+  rpc ReportCompliance (ComplianceReportRequest) returns (ComplianceReportResponse);
+  rpc FetchGuardKey (GuardKeyRequest) returns (GuardKeyResponse);
+}
+
+message EnrollRequest {
+  string one_time_token = 1;
+  string hostname = 2;
+  string os_info = 3;
+  string client_csr = 4;
+}
+
+message EnrollResponse {
+  string agent_id = 1;
+  string client_certificate_pem = 2;
+  string ca_certificate_pem = 3;
+  string core_signing_public_key = 4;
+  int64 cert_expires_at = 5;
+}
+
+message HeartbeatRequest {
+  string agent_id = 1;
+  int64 timestamp = 2;
+  uint32 active_guard_points = 3;
+  string agent_version = 4;
+}
+
+message HeartbeatResponse {
+  bool acknowledge = 1;
+  bool policy_update_available = 2;
+}
+
+message SyncPolicyRequest {
+  string agent_id = 1;
+  uint32 current_policy_version = 2;
+}
+
+message SyncPolicyResponse {
+  repeated hecate.policy.SignedPolicyEnvelope signed_policies = 1;
+  uint32 latest_policy_version = 2;
+}
+
+message GuardKeyRequest {
+  string agent_id = 1;
+  string policy_id = 2;
+  string key_id = 3;
+}
+
+message GuardKeyResponse {
+  bytes wrapped_dek = 1;
+  bytes nonce = 2;
+  uint32 key_version = 3;
+}
+
+message ComplianceReportRequest {
+  string agent_id = 1;
+  int64 timestamp = 2;
+  repeated GuardPointCompliance items = 3;
+}
+
+message GuardPointCompliance {
+  string path = 1;
+  bool is_mounted = 2;
+  bool is_encrypted = 3;
+  uint64 access_violations_count = 4;
+  string status = 5;
+  string error_message = 6;
+}
+
+message ComplianceReportResponse {
+  bool recorded = 1;
+}

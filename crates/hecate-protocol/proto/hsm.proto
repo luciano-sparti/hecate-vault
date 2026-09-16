@@ -1,0 +1,120 @@
+syntax = "proto3";
+package hecate.hsm;
+
+service HsmCryptoService {
+  rpc GenerateKey (GenerateKeyRequest) returns (GenerateKeyResponse);
+  rpc WrapKey (WrapKeyRequest) returns (WrapKeyResponse);
+  rpc UnwrapKey (UnwrapKeyRequest) returns (UnwrapKeyResponse);
+  rpc Encrypt (EncryptRequest) returns (EncryptResponse);
+  rpc Decrypt (DecryptRequest) returns (DecryptResponse);
+  rpc RotateKey (RotateKeyRequest) returns (RotateKeyResponse);
+  rpc GetKeyInfo (GetKeyInfoRequest) returns (GetKeyInfoResponse);
+  rpc DestroyKey (DestroyKeyRequest) returns (DestroyKeyResponse);
+}
+
+enum KeyType {
+  KEY_TYPE_UNSPECIFIED = 0;
+  KEY_TYPE_AES_256_GCM = 1;
+  KEY_TYPE_CHACHA20_POLY1305 = 2;
+  KEY_TYPE_HMAC_SHA256 = 3;
+}
+
+enum KeyState {
+  KEY_STATE_PRE_ACTIVE = 0;
+  KEY_STATE_ACTIVE = 1;
+  KEY_STATE_DEACTIVATED = 2;
+  KEY_STATE_COMPROMISED = 3;
+  KEY_STATE_DESTROYED = 4;
+}
+
+message GenerateKeyRequest {
+  string key_alias = 1;
+  KeyType key_type = 2;
+  map<string, string> tags = 3;
+}
+
+message GenerateKeyResponse {
+  string key_id = 1;
+  uint32 version = 2;
+  KeyState state = 3;
+}
+
+message WrapKeyRequest {
+  string kek_id = 1;
+  bytes dek_to_wrap = 2;
+}
+
+message WrapKeyResponse {
+  bytes wrapped_dek = 1;
+  bytes nonce = 2;
+  uint32 kek_version = 3;
+}
+
+message UnwrapKeyRequest {
+  string kek_id = 1;
+  bytes wrapped_dek = 2;
+  bytes nonce = 3;
+  uint32 kek_version = 4;
+}
+
+message UnwrapKeyResponse {
+  bytes unwrapped_dek = 1;
+}
+
+message EncryptRequest {
+  string key_id = 1;
+  bytes plaintext = 2;
+  bytes aad = 3;
+}
+
+message EncryptResponse {
+  bytes ciphertext = 1;
+  bytes nonce = 2;
+  bytes tag = 3;
+  uint32 key_version = 4;
+}
+
+message DecryptRequest {
+  string key_id = 1;
+  bytes ciphertext = 2;
+  bytes nonce = 3;
+  bytes tag = 4;
+  bytes aad = 5;
+  uint32 key_version = 6;
+}
+
+message DecryptResponse {
+  bytes plaintext = 1;
+}
+
+message RotateKeyRequest {
+  string key_id = 1;
+}
+
+message RotateKeyResponse {
+  string key_id = 1;
+  uint32 new_version = 2;
+}
+
+message GetKeyInfoRequest {
+  string key_id = 1;
+}
+
+message GetKeyInfoResponse {
+  string key_id = 1;
+  string key_alias = 2;
+  KeyType key_type = 3;
+  uint32 current_version = 4;
+  KeyState state = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message DestroyKeyRequest {
+  string key_id = 1;
+}
+
+message DestroyKeyResponse {
+  bool success = 1;
+  int64 destroyed_at = 2;
+}
