@@ -149,6 +149,9 @@ pub fn render_guardpoints(f: &mut Frame, app: &mut TuiApp, area: Rect, state_gua
                     PermissionAction::ActionRead => "Read Only",
                     PermissionAction::ActionWrite => "Write Only",
                     PermissionAction::ActionAuditOnly => "Audit Only",
+                    PermissionAction::ActionList => "List Only",
+                    PermissionAction::ActionKeyRotation => "Key Rotation",
+                    PermissionAction::ActionChown => "Chown Only",
                     PermissionAction::ActionUnspecified => "All",
                 };
 

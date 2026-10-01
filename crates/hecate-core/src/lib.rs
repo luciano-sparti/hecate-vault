@@ -2,6 +2,7 @@ pub mod agents;
 pub mod audit;
 pub mod cli;
 pub mod ha;
+pub mod metrics;
 pub mod pki;
 pub mod policy;
 pub mod secrets;

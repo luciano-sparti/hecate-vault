@@ -347,6 +347,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_complete"
+version = "4.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3be2ad0423bdbbb0e25bc89add796f3559706d4a95e1bc98e4d9662a957b6a19"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "clap_derive"
 version = "4.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,7 +778,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hecate-agent"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -792,11 +801,12 @@ dependencies = [
 
 [[package]]
 name = "hecate-core"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "clap_complete",
  "colored",
  "crossterm",
  "fd-lock",
@@ -814,12 +824,13 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tonic",
 ]
 
 [[package]]
 name = "hecate-crypto"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -839,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "hecate-protocol"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1957,6 +1968,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

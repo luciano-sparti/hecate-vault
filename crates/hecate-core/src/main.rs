@@ -4,6 +4,7 @@ use colored::Colorize;
 use hecate_core::audit::AuditLedger;
 use hecate_core::cli::{AgentCommands, BackupCommands, Cli, Commands, KeyCommands, PolicyCommands};
 use hecate_core::ha::backup::{create_dr_backup, restore_dr_backup};
+use hecate_core::metrics::HecateMetrics;
 use hecate_core::pki::InternalCertificateAuthority;
 use hecate_core::secrets::{VaultDatabase, VaultStorage};
 use hecate_core::server::HecateCoreServer;
@@ -12,6 +13,7 @@ use hecate_crypto::{
     derive_key_argon2id, detect_root_trust, generate_salt, split_secret,
     KeyType, PolicySigner, SecretBuffer,
 };
+use std::sync::Arc;
 use hecate_protocol::admin::admin_service_server::AdminServiceServer;
 use hecate_protocol::agent::agent_service_server::AgentServiceServer;
 use hecate_protocol::hsm::hsm_crypto_service_server::HsmCryptoServiceServer;
@@ -63,15 +65,21 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Server { listen } => {
+        Commands::Server { listen, metrics_addr } => {
             let addr: SocketAddr = listen.parse().context("Invalid server listen address")?;
             let state = load_or_init_core_state(&base_dir)?;
-            let core_server = HecateCoreServer::new(state);
+            let metrics = Arc::new(HecateMetrics::new());
+            let core_server = HecateCoreServer::with_metrics(state.clone(), metrics.clone());
 
             println!("{}", "═════════════════════════════════════════════════════".cyan());
             println!("  {} {}", "🛡️ ".green(), "Hecate Core Management Server & Software HSM".bold());
             println!("  Listening on: {}", listen.green().bold());
             println!("  Data Directory: {:?}", base_dir);
+
+            if let Ok(m_addr) = metrics_addr.parse::<SocketAddr>() {
+                let _ = HecateMetrics::start_metrics_server(m_addr, state.clone(), metrics.clone()).await;
+                println!("  Prometheus Metrics: {}", format!("http://{}/metrics", m_addr).magenta().bold());
+            }
             println!("{}", "═════════════════════════════════════════════════════".cyan());
 
             Server::builder()
@@ -131,6 +139,7 @@ async fn main() -> Result<()> {
                     deny_root,
                     uids,
                     binary_hashes,
+                    action,
                 } => {
                     let mut state = state_arc.write().await;
                     let mut subjects = Vec::new();
@@ -147,10 +156,20 @@ async fn main() -> Result<()> {
                         });
                     }
 
+                    let parsed_action = match action.to_lowercase().as_str() {
+                        "read" => PermissionAction::ActionRead,
+                        "write" => PermissionAction::ActionWrite,
+                        "list" => PermissionAction::ActionList,
+                        "keyrotation" | "key_rotation" => PermissionAction::ActionKeyRotation,
+                        "chown" => PermissionAction::ActionChown,
+                        "auditonly" | "audit_only" => PermissionAction::ActionAuditOnly,
+                        _ => PermissionAction::ActionReadWrite,
+                    };
+
                     let rule = PolicyRule {
                         rule_id: format!("rule-{}", id),
                         subjects,
-                        action: PermissionAction::ActionReadWrite as i32,
+                        action: parsed_action as i32,
                         allow: true,
                     };
 
@@ -270,6 +289,27 @@ async fn main() -> Result<()> {
                     state.persist()?;
                     println!("{} Core successfully restored from '{}'", "✓".green(), file.cyan());
                 }
+            }
+        }
+
+        Commands::Completions { shell } => {
+            use clap::CommandFactory;
+            let mut cmd = Cli::command();
+            clap_complete::generate(shell, &mut cmd, "hecate-core", &mut std::io::stdout());
+        }
+
+        Commands::Metrics { listen } => {
+            let state_arc = load_or_init_core_state(&base_dir)?;
+            let metrics = HecateMetrics::new();
+            if let Some(l) = listen {
+                let addr: SocketAddr = l.parse().context("Invalid metrics listen address")?;
+                println!("{} Serving Prometheus metrics at http://{}/metrics", "✓".green(), addr);
+                HecateMetrics::start_metrics_server(addr, state_arc.clone(), Arc::new(metrics)).await?;
+                tokio::signal::ctrl_c().await?;
+            } else {
+                let state = state_arc.read().await;
+                let output = metrics.render_prometheus(&state).await;
+                print!("{}", output);
             }
         }
 

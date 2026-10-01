@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "hecate-core",
     author = "Luciano",
-    version = "0.2.0",
+    version = "0.3.0",
     about = "Hecate Core — Enterprise Software HSM & Management System"
 )]
 pub struct Cli {
@@ -30,6 +30,8 @@ pub enum Commands {
     Server {
         #[arg(short, long, default_value = "127.0.0.1:50051")]
         listen: String,
+        #[arg(long, default_value = "127.0.0.1:9090")]
+        metrics_addr: String,
     },
     /// Key management operations
     Key {
@@ -54,6 +56,16 @@ pub enum Commands {
     Backup {
         #[command(subcommand)]
         action: BackupCommands,
+    },
+    /// Generate shell auto-completions
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    /// Export Prometheus metrics on stdout or start a dedicated metrics listener
+    Metrics {
+        #[arg(short, long)]
+        listen: Option<String>,
     },
     /// Launch the Interactive Terminal User Interface (TUI)
     Tui,
@@ -97,6 +109,8 @@ pub enum PolicyCommands {
         uids: Vec<String>,
         #[arg(long, value_delimiter = ',')]
         binary_hashes: Vec<String>,
+        #[arg(long, default_value = "readwrite")]
+        action: String,
     },
     /// List all Guard Point policies
     List,

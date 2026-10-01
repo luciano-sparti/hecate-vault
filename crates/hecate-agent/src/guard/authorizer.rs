@@ -59,10 +59,25 @@ impl ProcessContext {
 pub struct Authorizer;
 
 impl Authorizer {
+    pub fn action_matches(rule_action: PermissionAction, requested: PermissionAction) -> bool {
+        match (rule_action, requested) {
+            (_, PermissionAction::ActionUnspecified) => true,
+            (PermissionAction::ActionReadWrite, PermissionAction::ActionRead | PermissionAction::ActionWrite | PermissionAction::ActionReadWrite | PermissionAction::ActionList) => true,
+            (PermissionAction::ActionAuditOnly, PermissionAction::ActionAuditOnly | PermissionAction::ActionRead | PermissionAction::ActionList) => true,
+            (PermissionAction::ActionRead, PermissionAction::ActionRead | PermissionAction::ActionList) => true,
+            (PermissionAction::ActionWrite, PermissionAction::ActionWrite) => true,
+            (PermissionAction::ActionList, PermissionAction::ActionList) => true,
+            (PermissionAction::ActionKeyRotation, PermissionAction::ActionKeyRotation) => true,
+            (PermissionAction::ActionChown, PermissionAction::ActionChown) => true,
+            (a, b) if a == b => true,
+            _ => false,
+        }
+    }
+
     pub fn is_authorized(
         policy: &GuardPointPolicy,
         ctx: &ProcessContext,
-        _action: PermissionAction,
+        action: PermissionAction,
     ) -> (bool, Option<String>) {
         // Root containment check
         if ctx.uid == 0 && policy.deny_root_unauthorized {
@@ -70,7 +85,7 @@ impl Authorizer {
                 rule.subjects.iter().any(|s| {
                     (s.subject_type() == SubjectType::Uid && s.identifier == "0")
                         || (s.subject_type() == SubjectType::BinaryHash && s.identifier.eq_ignore_ascii_case(&ctx.binary_sha256))
-                }) && rule.allow
+                }) && rule.allow && Self::action_matches(rule.action(), action)
             });
 
             if !matches_root_rule {
@@ -90,10 +105,13 @@ impl Authorizer {
                 };
 
                 if subject_match {
-                    if rule.allow {
+                    if !rule.allow {
+                        return (false, Some(format!("Explicitly denied by rule {}", rule.rule_id)));
+                    }
+                    if Self::action_matches(rule.action(), action) {
                         return (true, None);
                     } else {
-                        return (false, Some(format!("Explicitly denied by rule {}", rule.rule_id)));
+                        return (false, Some(format!("Action {:?} not permitted by rule {} (allowed: {:?})", action, rule.rule_id, rule.action())));
                     }
                 }
             }
@@ -230,4 +248,85 @@ mod tests {
         };
         assert!(!Authorizer::is_authorized(&policy, &untrusted_binary_ctx, PermissionAction::ActionRead).0);
     }
+
+    #[test]
+    fn test_granular_permissions() {
+        let policy = GuardPointPolicy {
+            policy_id: "gp-granular".to_string(),
+            policy_name: "Granular Policy".to_string(),
+            target_path: "/data/sec".to_string(),
+            backing_path: "/data/sec_raw".to_string(),
+            key_id: "key-sec".to_string(),
+            deny_root_unauthorized: false,
+            rules: vec![
+                PolicyRule {
+                    rule_id: "rule-list".to_string(),
+                    subjects: vec![hecate_protocol::policy::PolicySubject {
+                        subject_type: SubjectType::Uid as i32,
+                        identifier: "1000".to_string(),
+                    }],
+                    action: PermissionAction::ActionList as i32,
+                    allow: true,
+                },
+                PolicyRule {
+                    rule_id: "rule-secops".to_string(),
+                    subjects: vec![hecate_protocol::policy::PolicySubject {
+                        subject_type: SubjectType::Uid as i32,
+                        identifier: "2000".to_string(),
+                    }],
+                    action: PermissionAction::ActionKeyRotation as i32,
+                    allow: true,
+                },
+                PolicyRule {
+                    rule_id: "rule-admin".to_string(),
+                    subjects: vec![hecate_protocol::policy::PolicySubject {
+                        subject_type: SubjectType::Uid as i32,
+                        identifier: "3000".to_string(),
+                    }],
+                    action: PermissionAction::ActionChown as i32,
+                    allow: true,
+                },
+            ],
+            policy_version: 1,
+            updated_at: 0,
+        };
+
+        let user_ctx = ProcessContext {
+            pid: 10,
+            uid: 1000,
+            gid: 1000,
+            binary_path: "/bin/ls".to_string(),
+            binary_sha256: "dummy".to_string(),
+        };
+
+        // User 1000 can list
+        assert!(Authorizer::is_authorized(&policy, &user_ctx, PermissionAction::ActionList).0);
+        // But cannot write or chown or rotate keys
+        assert!(!Authorizer::is_authorized(&policy, &user_ctx, PermissionAction::ActionWrite).0);
+        assert!(!Authorizer::is_authorized(&policy, &user_ctx, PermissionAction::ActionChown).0);
+        assert!(!Authorizer::is_authorized(&policy, &user_ctx, PermissionAction::ActionKeyRotation).0);
+
+        // User 2000 (SecOps) can rotate keys
+        let secops_ctx = ProcessContext {
+            pid: 20,
+            uid: 2000,
+            gid: 2000,
+            binary_path: "/usr/bin/vault-agent".to_string(),
+            binary_sha256: "sechash".to_string(),
+        };
+        assert!(Authorizer::is_authorized(&policy, &secops_ctx, PermissionAction::ActionKeyRotation).0);
+        assert!(!Authorizer::is_authorized(&policy, &secops_ctx, PermissionAction::ActionWrite).0);
+
+        // User 3000 (Admin) can chown
+        let admin_ctx = ProcessContext {
+            pid: 30,
+            uid: 3000,
+            gid: 3000,
+            binary_path: "/bin/chown".to_string(),
+            binary_sha256: "adminhash".to_string(),
+        };
+        assert!(Authorizer::is_authorized(&policy, &admin_ctx, PermissionAction::ActionChown).0);
+        assert!(!Authorizer::is_authorized(&policy, &admin_ctx, PermissionAction::ActionKeyRotation).0);
+    }
 }
+

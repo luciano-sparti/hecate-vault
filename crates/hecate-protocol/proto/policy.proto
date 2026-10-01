@@ -16,6 +16,9 @@ enum PermissionAction {
   ACTION_WRITE = 2;
   ACTION_READ_WRITE = 3;
   ACTION_AUDIT_ONLY = 4;
+  ACTION_LIST = 5;
+  ACTION_KEY_ROTATION = 6;
+  ACTION_CHOWN = 7;
 }
 
 message PolicySubject {

@@ -63,11 +63,23 @@ impl CoreState {
 #[derive(Clone)]
 pub struct HecateCoreServer {
     state: Arc<RwLock<CoreState>>,
+    metrics: Arc<crate::metrics::HecateMetrics>,
 }
 
 impl HecateCoreServer {
     pub fn new(state: Arc<RwLock<CoreState>>) -> Self {
-        Self { state }
+        Self {
+            state,
+            metrics: Arc::new(crate::metrics::HecateMetrics::new()),
+        }
+    }
+
+    pub fn with_metrics(state: Arc<RwLock<CoreState>>, metrics: Arc<crate::metrics::HecateMetrics>) -> Self {
+        Self { state, metrics }
+    }
+
+    pub fn metrics(&self) -> Arc<crate::metrics::HecateMetrics> {
+        self.metrics.clone()
     }
 }
 
@@ -99,6 +111,8 @@ impl HsmCryptoService for HecateCoreServer {
 
         let _ = state.persist();
 
+        self.metrics.record_crypto_op("generate_key", &meta.key_id).await;
+
         Ok(Response::new(GenerateKeyResponse {
             key_id: meta.key_id,
             version: meta.current_version,
@@ -119,6 +133,8 @@ impl HsmCryptoService for HecateCoreServer {
             .wrap_key(&req.kek_id, &dek)
             .map_err(|e| Status::internal(e.to_string()))?;
 
+        self.metrics.record_crypto_op("wrap_key", &req.kek_id).await;
+
         Ok(Response::new(WrapKeyResponse {
             wrapped_dek: wrapped,
             nonce,
@@ -138,6 +154,8 @@ impl HsmCryptoService for HecateCoreServer {
             .unwrap_key(&req.kek_id, &req.wrapped_dek, &req.nonce)
             .map_err(|e| Status::internal(e.to_string()))?;
 
+        self.metrics.record_crypto_op("unwrap_key", &req.kek_id).await;
+
         Ok(Response::new(UnwrapKeyResponse {
             unwrapped_dek: unwrapped.as_bytes().to_vec(),
         }))
@@ -154,6 +172,8 @@ impl HsmCryptoService for HecateCoreServer {
             .hsm
             .encrypt(&req.key_id, &SecretBuffer::from_slice(&req.plaintext), &req.aad)
             .map_err(|e| Status::internal(e.to_string()))?;
+
+        self.metrics.record_crypto_op("encrypt", &req.key_id).await;
 
         Ok(Response::new(EncryptResponse {
             ciphertext,
@@ -174,6 +194,8 @@ impl HsmCryptoService for HecateCoreServer {
             .hsm
             .decrypt(&req.key_id, &req.ciphertext, &req.nonce, &req.aad)
             .map_err(|e| Status::internal(e.to_string()))?;
+
+        self.metrics.record_crypto_op("decrypt", &req.key_id).await;
 
         Ok(Response::new(DecryptResponse {
             plaintext: decrypted.as_bytes().to_vec(),
@@ -198,6 +220,8 @@ impl HsmCryptoService for HecateCoreServer {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let _ = state.persist();
+
+        self.metrics.record_crypto_op("rotate_key", &req.key_id).await;
 
         Ok(Response::new(RotateKeyResponse {
             key_id: req.key_id,
@@ -331,6 +355,42 @@ impl AgentService for HecateCoreServer {
             signed_policies: envelopes,
             latest_policy_version: 1,
         }))
+    }
+
+    type StreamPoliciesStream = std::pin::Pin<
+        Box<dyn tonic::codegen::tokio_stream::Stream<Item = Result<SyncPolicyResponse, Status>> + Send + 'static>,
+    >;
+
+    async fn stream_policies(
+        &self,
+        request: Request<tonic::Streaming<HeartbeatRequest>>,
+    ) -> Result<Response<Self::StreamPoliciesStream>, Status> {
+        let mut in_stream = request.into_inner();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let state = self.state.clone();
+        let metrics = self.metrics.clone();
+
+        tokio::spawn(async move {
+            while let Ok(Some(heartbeat)) = in_stream.message().await {
+                metrics.record_heartbeat();
+                let mut st = state.write().await;
+                st.reload_from_disk();
+                let _ = st.agent_registry.record_heartbeat(&heartbeat.agent_id);
+                let signer = st.policy_signer.clone();
+                if let Ok(envelopes) = st.policy_store.sign_policies(&signer) {
+                    let resp = SyncPolicyResponse {
+                        signed_policies: envelopes,
+                        latest_policy_version: 1,
+                    };
+                    if tx.send(Ok(resp)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        let out_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(out_stream) as Self::StreamPoliciesStream))
     }
 
     async fn report_compliance(

@@ -7,6 +7,7 @@ service AgentService {
   rpc EnrollAgent (EnrollRequest) returns (EnrollResponse);
   rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
   rpc SyncPolicies (SyncPolicyRequest) returns (SyncPolicyResponse);
+  rpc StreamPolicies (stream HeartbeatRequest) returns (stream SyncPolicyResponse);
   rpc ReportCompliance (ComplianceReportRequest) returns (ComplianceReportResponse);
   rpc FetchGuardKey (GuardKeyRequest) returns (GuardKeyResponse);
 }
