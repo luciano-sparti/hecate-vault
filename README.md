@@ -141,9 +141,14 @@ flowchart TD
 - **Instant Chain Verification**: Any out-of-band byte alteration in the audit log breaks the cryptographic chain and triggers instant visual tamper alerts.
 
 ### 📁 Transparent Guard Points & Root Containment
-- **Granular Access Control Policies**: Guard points bind target mount points to backing ciphertext stores under strict access rules (Allowed UIDs, GIDs, binary path digests, and action permissions).
+- **Granular Access Control Policies**: Guard points bind target mount points to backing ciphertext stores under fine-grained privilege matrices (`Read`, `Write`, `List`, `KeyRotation`, `Chown`, `AuditOnly`) with strict UID/GID and binary executable SHA-256 validation.
 - **Root Containment Gate (`deny_root_unauthorized`)**: Rejects unauthorized access attempts even from UID 0 (`root`), mitigating rogue superuser compromise on protected nodes.
+- **Bi-directional gRPC Streaming Policy Synchronization**: Agents maintain long-lived HTTP/2 streams (`StreamPolicies`) with Core for real-time push distribution of signed policies and sub-millisecond revocation broadcasts.
 - **Asymmetric Signature Verification**: Agent synchronizes policies from Core with asymmetric **Ed25519** signatures and monotonic sequence numbers to thwart policy spoofing and replay attacks.
+
+### 📊 Observability, Metrics & Telemetry
+- **Prometheus Telemetry Exporter**: Lightweight embedded HTTP server (`/metrics` or `hecate-core metrics`) serving live Prometheus counters and gauges for HSM crypto operations, agent heartbeats, active policies, and hash-chain block length.
+- **Shell Autocompletions**: Built-in completion script generation for `bash`, `zsh`, `fish`, and `powershell` via `hecate-core completions <shell>`.
 
 ### 🛟 Disaster Recovery & Encrypted Snapshots
 - **Single-File Encrypted Backup Archive (`.hct`)**: Full encrypted bundle containing vault metadata, key rings, policies, PKI credentials, and audit entries sealed with Argon2id KDF and AES-256-GCM.
@@ -290,6 +295,8 @@ Commands:
   compliance  Compliance monitoring dashboard
   audit       Audit ledger verification and log inspection
   backup      Disaster Recovery Backup and Restoration (create, restore)
+  metrics     Export Prometheus metrics on an HTTP endpoint
+  completions Generate shell auto-completion scripts (bash, zsh, fish, powershell)
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -305,6 +312,7 @@ Options:
   - `-p, --passphrase <PASS>`: Master Key derivation passphrase
 - **`hecate-core server`**:
   - `-l, --listen <ADDR>`: gRPC bind host and port [default: `127.0.0.1:50051`]
+  - `--metrics-addr <ADDR>`: Optional Prometheus `/metrics` HTTP listen address (e.g. `0.0.0.0:9100`)
 - **`hecate-core tui`**: Launch interactive Ratatui dashboard.
 - **`hecate-core key`**:
   - `create -a, --alias <ALIAS> [-t, --key-type <aes256gcm>]`: Generate a new KEK in the HSM.
@@ -322,6 +330,10 @@ Options:
 - **`hecate-core backup`**:
   - `create -o, --out <FILE.hct>`: Create an encrypted Disaster Recovery archive.
   - `restore -f, --file <FILE.hct>`: Restore Vault state from an encrypted DR archive.
+- **`hecate-core metrics`**:
+  - `-l, --listen <ADDR>`: HTTP listen address for Prometheus metrics scraping [default: `127.0.0.1:9100`]
+- **`hecate-core completions <SHELL>`**:
+  - Generate shell completions for `bash`, `zsh`, `fish`, or `powershell`.
 
 ---
 
